@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(150 20% 4%);
+  --color-foreground: hsl(150 10% 92%);
+  --color-card: hsl(150 20% 6%);
+  --color-card-foreground: hsl(150 10% 92%);
+  --color-popover: hsl(150 20% 6%);
+  --color-popover-foreground: hsl(150 10% 92%);
+  --color-primary: hsl(160 84% 39%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(150 20% 11%);
+  --color-secondary-foreground: hsl(150 10% 92%);
+  --color-muted: hsl(150 20% 11%);
+  --color-muted-foreground: hsl(150 10% 55%);
+  --color-accent: hsl(160 84% 15%);
+  --color-accent-foreground: hsl(150 10% 92%);
+  --color-destructive: hsl(0 63% 31%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(150 20% 17%);
+  --color-input: hsl(150 20% 17%);
+  --color-ring: hsl(160 84% 39%);
+
+  --color-success: hsl(142 76% 36%);
+  --color-warning: hsl(38 92% 50%);
+  --color-info: hsl(199 89% 48%);
+
+  --radius: 0.5rem;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(150 20% 17%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(150 10% 35%);
+}

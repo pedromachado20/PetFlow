@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, PawPrint, Phone, Mail, Pencil, Trash2, User } from "lucide-react";
+import { Plus, Search, PawPrint, Phone, Mail, Pencil, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,6 +11,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { ImageUpload } from "~/components/ui/image-upload";
 import { toast } from "sonner";
 import { formatPhone } from "~/lib/utils";
 
@@ -70,7 +71,6 @@ const schema = z.object({
   cpf: z.string().optional(),
   cidade: z.string().optional(),
   estado: z.string().optional(),
-  fotoUrl: z.string().optional(),
 });
 
 type Tutor = Awaited<ReturnType<typeof getTutores>>[number];
@@ -95,6 +95,7 @@ function TutoresPage() {
   const [editando, setEditando] = useState<Tutor | null>(null);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
+  const [foto, setFoto] = useState<string | null>(null);
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["tutores"],
@@ -105,19 +106,21 @@ function TutoresPage() {
 
   function abrirNovo() {
     setEditando(null);
-    reset({ nome: "", email: "", telefone: "", cpf: "", cidade: "", estado: "", fotoUrl: "" });
+    setFoto(null);
+    reset({ nome: "", email: "", telefone: "", cpf: "", cidade: "", estado: "" });
     setOpen(true);
   }
 
   function abrirEditar(t: Tutor) {
     setEditando(t);
-    reset({ nome: t.nome, email: t.email ?? "", telefone: t.telefone ?? "", cpf: t.cpf ?? "", cidade: t.cidade ?? "", estado: t.estado ?? "", fotoUrl: t.fotoUrl ?? "" });
+    setFoto(t.fotoUrl ?? null);
+    reset({ nome: t.nome, email: t.email ?? "", telefone: t.telefone ?? "", cpf: t.cpf ?? "", cidade: t.cidade ?? "", estado: t.estado ?? "" });
     setOpen(true);
   }
 
   const salvar = useMutation({
     mutationFn: (values: z.infer<typeof schema>) =>
-      salvarTutor({ data: { ...values, id: editando?.id } }),
+      salvarTutor({ data: { ...values, id: editando?.id, fotoUrl: foto ?? undefined } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tutores"] });
       toast.success(editando ? "Tutor atualizado" : "Tutor cadastrado");
@@ -187,11 +190,7 @@ function TutoresPage() {
                 <Input {...register("estado")} maxLength={2} placeholder="SP" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> Foto (URL)</Label>
-              <Input {...register("fotoUrl")} type="url" placeholder="https://..." />
-              <p className="text-xs text-muted-foreground">Cole o link de uma foto de perfil</p>
-            </div>
+            <ImageUpload label="Foto do Tutor" value={foto} onChange={setFoto} />
             <Button type="submit" className="w-full" disabled={salvar.isPending}>
               {salvar.isPending ? "Salvando..." : editando ? "Salvar Alterações" : "Cadastrar"}
             </Button>

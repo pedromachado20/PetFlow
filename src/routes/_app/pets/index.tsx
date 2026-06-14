@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2, ImageIcon } from "lucide-react";
+import { Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +13,7 @@ import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { ImageUpload } from "~/components/ui/image-upload";
 import { toast } from "sonner";
 import { especieLabel, calcularIdadePet } from "~/lib/utils";
 
@@ -88,7 +89,6 @@ const schema = z.object({
   porte: z.string().min(1),
   dataNascimento: z.string().optional(),
   observacoes: z.string().optional(),
-  fotoUrl: z.string().optional(),
 });
 
 type Pet = Awaited<ReturnType<typeof getPets>>["pets"][number];
@@ -115,6 +115,8 @@ function PetsPage() {
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
 
+  const [foto, setFoto] = useState<string | null>(null);
+
   // Selects controlados
   const [tutorSel, setTutorSel] = useState("");
   const [especieSel, setEspecieSel] = useState("");
@@ -130,13 +132,15 @@ function PetsPage() {
 
   function abrirNovo() {
     setEditando(null);
+    setFoto(null);
     setTutorSel(""); setEspecieSel(""); setSexoSel(""); setPorteSel("");
-    reset({ nome: "", raca: "", dataNascimento: "", observacoes: "", fotoUrl: "" });
+    reset({ nome: "", raca: "", dataNascimento: "", observacoes: "" });
     setOpen(true);
   }
 
   function abrirEditar(p: Pet) {
     setEditando(p);
+    setFoto(p.fotoUrl ?? null);
     setTutorSel(p.tutorId);   setValue("tutorId", p.tutorId);
     setEspecieSel(p.especie); setValue("especie", p.especie);
     setSexoSel(p.sexo);       setValue("sexo", p.sexo);
@@ -144,7 +148,7 @@ function PetsPage() {
     reset({
       tutorId: p.tutorId, nome: p.nome, especie: p.especie, raca: p.raca ?? "",
       sexo: p.sexo, porte: p.porte, dataNascimento: p.dataNascimento ?? "",
-      observacoes: p.observacoes ?? "", fotoUrl: p.fotoUrl ?? "",
+      observacoes: p.observacoes ?? "",
     });
     // reset sobrescreve os setValue acima para campos de texto, mas Selects precisam do state
     setTimeout(() => {
@@ -158,7 +162,7 @@ function PetsPage() {
 
   const salvar = useMutation({
     mutationFn: (values: z.infer<typeof schema>) =>
-      salvarPet({ data: { ...values, id: editando?.id } }),
+      salvarPet({ data: { ...values, id: editando?.id, fotoUrl: foto ?? undefined } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pets"] });
       toast.success(editando ? "Pet atualizado" : "Pet cadastrado");
@@ -263,11 +267,7 @@ function PetsPage() {
                 <Input type="date" {...register("dataNascimento")} />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Foto (URL)</Label>
-              <Input {...register("fotoUrl")} type="url" placeholder="https://..." />
-              <p className="text-xs text-muted-foreground">Cole o link de uma foto do pet</p>
-            </div>
+            <ImageUpload label="Foto do Pet" value={foto} onChange={setFoto} />
             <div className="space-y-1.5">
               <Label>Observações / Alergias</Label>
               <Input {...register("observacoes")} placeholder="Opcional" />

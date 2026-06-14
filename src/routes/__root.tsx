@@ -5,7 +5,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 import appCss from "~/styles/app.css?url";
@@ -41,10 +41,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
   return (
-    <RootDocument>
-      <Outlet />
-    </RootDocument>
+    <QueryClientProvider client={queryClient}>
+      <RootDocument>
+        <Outlet />
+      </RootDocument>
+    </QueryClientProvider>
   );
 }
 

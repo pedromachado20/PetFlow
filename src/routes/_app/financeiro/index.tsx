@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Printer } from "lucide-react";
+import { printTable } from "~/lib/pdf";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -124,10 +125,26 @@ function FinanceiroPage() {
 
       <div className="flex items-center justify-between">
         <h3 className="font-semibold">Lançamentos do Mês</h3>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4" /> Lançamento</Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() =>
+            printTable(
+              "Financeiro — Lançamentos do Mês",
+              ["Data", "Tipo", "Categoria", "Descrição", "Valor"],
+              (data?.transacoes ?? []).map((t) => [
+                new Date(t.data + "T00:00:00").toLocaleDateString("pt-BR"),
+                t.tipo,
+                t.categoria,
+                t.descricao,
+                (t.tipo === "receita" ? "+ " : "- ") + parseFloat(t.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+              ])
+            )
+          }>
+            <Printer className="h-4 w-4" /> PDF
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="h-4 w-4" /> Lançamento</Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Novo Lançamento</DialogTitle></DialogHeader>
             <form onSubmit={handleSubmit((v) => criar.mutate(v))} className="space-y-3">
@@ -171,7 +188,8 @@ function FinanceiroPage() {
               </Button>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading ? (

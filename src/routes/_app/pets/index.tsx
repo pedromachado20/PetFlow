@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Printer } from "lucide-react";
+import { printTable } from "~/lib/pdf";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -189,6 +190,14 @@ function PetsPage() {
 
   const especieBadgeColor: Record<string, string> = { cachorro: "default", gato: "secondary", passaro: "outline" };
 
+  function handlePrint() {
+    printTable(
+      "Pets",
+      ["Nome", "Espécie", "Raça", "Tutor", "Sexo", "Porte"],
+      (data?.pets ?? []).map((p) => [p.nome, especieLabel(p.especie), p.raca ?? "-", p.tutor?.nome ?? "-", p.sexo, p.porte])
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -196,7 +205,12 @@ function PetsPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input className="pl-8" placeholder="Buscar pets..." value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
-        <Button size="sm" onClick={abrirNovo}><Plus className="h-4 w-4" /> Novo Pet</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handlePrint} disabled={!(data?.pets.length)}>
+            <Printer className="h-4 w-4" /> PDF
+          </Button>
+          <Button size="sm" onClick={abrirNovo}><Plus className="h-4 w-4" /> Novo Pet</Button>
+        </div>
       </div>
 
       {/* Dialog criar/editar */}

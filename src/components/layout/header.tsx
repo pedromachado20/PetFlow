@@ -11,6 +11,7 @@ import { Button } from "~/components/ui/button";
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/agenda": "Agenda",
+  "/caixa": "Caixa",
   "/tutores": "Tutores",
   "/pets": "Pets",
   "/servicos": "Serviços",

@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, PawPrint, Phone, Mail, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, PawPrint, Phone, Mail, Pencil, Trash2, Printer } from "lucide-react";
+import { printTable } from "~/lib/pdf";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -145,6 +146,14 @@ function TutoresPage() {
     t.email?.toLowerCase().includes(busca.toLowerCase())
   );
 
+  function handlePrint() {
+    printTable(
+      "Tutores",
+      ["Nome", "Telefone", "Email", "Cidade/UF", "Pets"],
+      data.map((t) => [t.nome, t.telefone ?? "-", t.email ?? "-", t.cidade ? `${t.cidade}/${t.estado ?? ""}` : "-", t.pets?.length ?? 0])
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -152,7 +161,12 @@ function TutoresPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input className="pl-8" placeholder="Buscar tutores..." value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
-        <Button size="sm" onClick={abrirNovo}><Plus className="h-4 w-4" /> Novo Tutor</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handlePrint} disabled={!data.length}>
+            <Printer className="h-4 w-4" /> PDF
+          </Button>
+          <Button size="sm" onClick={abrirNovo}><Plus className="h-4 w-4" /> Novo Tutor</Button>
+        </div>
       </div>
 
       {/* Dialog criar/editar */}

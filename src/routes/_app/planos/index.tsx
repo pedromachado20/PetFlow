@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Printer } from "lucide-react";
+import { printTable } from "~/lib/pdf";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -129,9 +130,20 @@ function PlanosPage() {
     onError: () => toast.error("Erro ao remover plano"),
   });
 
+  function handlePrint() {
+    printTable(
+      "Planos",
+      ["Nome", "Tipo", "Preço", "Assinantes Ativos", "Descrição"],
+      data.map((p) => [p.nome, p.tipo, p.preco ?? "-", p.assinaturas?.length ?? 0, p.descricao ?? "-"])
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={handlePrint} disabled={!data.length}>
+          <Printer className="h-4 w-4" /> PDF
+        </Button>
         <Button size="sm" onClick={abrirNovo}><Plus className="h-4 w-4" /> Novo Plano</Button>
       </div>
 

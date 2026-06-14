@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarDays, Users, PawPrint, Scissors,
   UserCheck, DollarSign, BarChart3, Settings, ChevronLeft,
-  ChevronRight, Stethoscope, CreditCard,
+  ChevronRight, CreditCard, Receipt,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 
@@ -11,31 +11,32 @@ const navItems = [
   {
     label: "Principal",
     items: [
-      { icon: LayoutDashboard, label: "Dashboard", to: "/dashboard" },
-      { icon: CalendarDays, label: "Agenda", to: "/agenda" },
+      { icon: LayoutDashboard, label: "Dashboard",  to: "/dashboard" },
+      { icon: CalendarDays,    label: "Agenda",     to: "/agenda" },
+      { icon: Receipt,         label: "Caixa",      to: "/caixa" },
     ],
   },
   {
     label: "Cadastros",
     items: [
-      { icon: Users, label: "Tutores", to: "/tutores" },
-      { icon: PawPrint, label: "Pets", to: "/pets" },
+      { icon: Users,    label: "Tutores", to: "/tutores" },
+      { icon: PawPrint, label: "Pets",    to: "/pets" },
     ],
   },
   {
     label: "Serviços",
     items: [
-      { icon: Scissors, label: "Serviços", to: "/servicos" },
-      { icon: UserCheck, label: "Profissionais", to: "/profissionais" },
-      { icon: CreditCard, label: "Planos", to: "/planos" },
+      { icon: Scissors,   label: "Serviços",       to: "/servicos" },
+      { icon: UserCheck,  label: "Profissionais",  to: "/profissionais" },
+      { icon: CreditCard, label: "Planos",         to: "/planos" },
     ],
   },
   {
     label: "Gestão",
     items: [
-      { icon: DollarSign, label: "Financeiro", to: "/financeiro" },
-      { icon: BarChart3, label: "Relatórios", to: "/relatorios" },
-      { icon: Settings, label: "Configurações", to: "/configuracoes" },
+      { icon: DollarSign, label: "Financeiro",    to: "/financeiro" },
+      { icon: BarChart3,  label: "Relatórios",    to: "/relatorios" },
+      { icon: Settings,   label: "Configurações", to: "/configuracoes" },
     ],
   },
 ];
@@ -46,17 +47,10 @@ export function AppSidebar() {
   const pathname = router.location.pathname;
 
   return (
-    <aside
-      className={cn(
-        "relative flex flex-col border-r border-border bg-card transition-all duration-300",
-        collapsed ? "w-16" : "w-56"
-      )}
-    >
+    <aside className={cn("relative flex flex-col border-r border-border bg-card transition-all duration-300", collapsed ? "w-16" : "w-56")}>
       <div className={cn("flex items-center border-b border-border", collapsed ? "justify-center p-4" : "px-4 py-4 gap-2")}>
         <PawPrint className="h-7 w-7 text-primary shrink-0" />
-        {!collapsed && (
-          <span className="text-lg font-bold text-foreground">PetFlow</span>
-        )}
+        {!collapsed && <span className="text-lg font-bold text-foreground">PetFlow</span>}
       </div>
 
       <nav className="flex-1 overflow-y-auto py-3">

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2, Printer, Info } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toast } from "sonner";
 import { formatCurrency } from "~/lib/utils";
+import { printTable } from "~/lib/pdf";
 
 const getAgenda = createServerFn({ method: "GET" })
   .validator(z.object({ data: z.string() }))
@@ -23,7 +24,7 @@ const getAgenda = createServerFn({ method: "GET" })
     const { db } = await import("~/db");
     const { tenantId } = await requireTenant();
     const { eq, and } = await import("drizzle-orm");
-    const { appointments, pets: petsSchema, tutores: tutoresSchema, professionals, services } = await import("~/db/schema");
+    const { appointments, pets: petsSchema, professionals, services } = await import("~/db/schema");
 
     const [agendamentos, profissionais, petsLista, servicos] = await Promise.all([
       db.query.appointments.findMany({
@@ -123,9 +124,9 @@ function AgendaPage() {
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState<Agendamento | null>(null);
   const [excluindo, setExcluindo] = useState<string | null>(null);
+  const [detalhe, setDetalhe] = useState<Agendamento | null>(null);
   const [dataAtual, setDataAtual] = useState(() => new Date().toISOString().slice(0, 10));
 
-  // Selects controlados
   const [petSel, setPetSel] = useState("");
   const [proSel, setProSel] = useState("");
   const [svcSel, setSvcSel] = useState("");
@@ -146,27 +147,18 @@ function AgendaPage() {
 
   function abrirEditar(a: Agendamento) {
     setEditando(a);
-    setPetSel(a.petId);            setValue("petId", a.petId);
-    setProSel(a.professionalId);   setValue("professionalId", a.professionalId);
-    setSvcSel(a.serviceId);        setValue("serviceId", a.serviceId);
+    setPetSel(a.petId);           setValue("petId", a.petId);
+    setProSel(a.professionalId);  setValue("professionalId", a.professionalId);
+    setSvcSel(a.serviceId);       setValue("serviceId", a.serviceId);
     reset({ petId: a.petId, professionalId: a.professionalId, serviceId: a.serviceId, data: a.data, horaInicio: a.horaInicio, horaFim: a.horaFim, observacoes: a.observacoes ?? "" });
-    setTimeout(() => {
-      setValue("petId", a.petId);
-      setValue("professionalId", a.professionalId);
-      setValue("serviceId", a.serviceId);
-    }, 0);
+    setTimeout(() => { setValue("petId", a.petId); setValue("professionalId", a.professionalId); setValue("serviceId", a.serviceId); }, 0);
     setOpen(true);
   }
 
   const salvar = useMutation({
-    mutationFn: (values: z.infer<typeof schema>) =>
-      salvarAgendamento({ data: { ...values, id: editando?.id } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["agenda"] });
-      toast.success(editando ? "Agendamento atualizado" : "Agendamento criado");
-      setOpen(false);
-    },
-    onError: () => toast.error("Erro ao salvar agendamento"),
+    mutationFn: (values: z.infer<typeof schema>) => salvarAgendamento({ data: { ...values, id: editando?.id } }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["agenda"] }); toast.success(editando ? "Atualizado" : "Agendado"); setOpen(false); },
+    onError: () => toast.error("Erro ao salvar"),
   });
 
   const mudarStatus = useMutation({
@@ -176,18 +168,32 @@ function AgendaPage() {
 
   const excluir = useMutation({
     mutationFn: (id: string) => excluirAgendamento({ data: { id } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["agenda"] });
-      toast.success("Agendamento excluído");
-      setExcluindo(null);
-    },
-    onError: () => toast.error("Erro ao excluir agendamento"),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["agenda"] }); toast.success("Excluído"); setExcluindo(null); },
+    onError: () => toast.error("Erro ao excluir"),
   });
 
   function mudarDia(delta: number) {
     const d = new Date(dataAtual + "T00:00:00");
     d.setDate(d.getDate() + delta);
     setDataAtual(d.toISOString().slice(0, 10));
+  }
+
+  function handlePrint() {
+    const rows = (data?.agendamentos ?? []).map((a) => [
+      a.horaInicio + " – " + a.horaFim,
+      a.pet?.nome ?? "-",
+      a.tutor?.nome ?? "-",
+      a.professional?.nome ?? "-",
+      a.service?.nome ?? "-",
+      formatCurrency(a.preco),
+      a.status.replace("_", " "),
+    ]);
+    printTable(
+      "Agenda",
+      ["Horário", "Pet", "Tutor", "Profissional", "Serviço", "Valor", "Status"],
+      rows,
+      new Date(dataAtual + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    );
   }
 
   return (
@@ -201,10 +207,15 @@ function AgendaPage() {
           <Button variant="ghost" size="icon" onClick={() => mudarDia(1)}><ChevronRight className="h-4 w-4" /></Button>
           <Button variant="ghost" size="sm" onClick={() => setDataAtual(new Date().toISOString().slice(0, 10))}>Hoje</Button>
         </div>
-        <Button size="sm" onClick={abrirNovo}><Plus className="h-4 w-4" /> Agendar</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handlePrint} disabled={!data?.agendamentos.length}>
+            <Printer className="h-4 w-4" /> PDF
+          </Button>
+          <Button size="sm" onClick={abrirNovo}><Plus className="h-4 w-4" /> Agendar</Button>
+        </div>
       </div>
 
-      {/* Dialog criar/editar agendamento */}
+      {/* Dialog criar/editar */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editando ? "Editar Agendamento" : "Novo Agendamento"}</DialogTitle></DialogHeader>
@@ -213,53 +224,29 @@ function AgendaPage() {
               <Label>Pet</Label>
               <Select value={petSel} onValueChange={(v) => { setPetSel(v); setValue("petId", v); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione o pet" /></SelectTrigger>
-                <SelectContent>
-                  {data?.pets.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.nome} ({p.tutor?.nome})</SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectContent>{data?.pets.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome} ({p.tutor?.nome})</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Profissional</Label>
               <Select value={proSel} onValueChange={(v) => { setProSel(v); setValue("professionalId", v); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {data?.profissionais.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectContent>{data?.profissionais.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Serviço</Label>
               <Select value={svcSel} onValueChange={(v) => { setSvcSel(v); setValue("serviceId", v); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {data?.servicos.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.nome} — {formatCurrency(s.preco)}</SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectContent>{data?.servicos.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome} — {formatCurrency(s.preco)}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1.5 col-span-1">
-                <Label>Data</Label>
-                <Input type="date" {...register("data")} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Início</Label>
-                <Input type="time" {...register("horaInicio")} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fim</Label>
-                <Input type="time" {...register("horaFim")} />
-              </div>
+              <div className="space-y-1.5 col-span-1"><Label>Data</Label><Input type="date" {...register("data")} /></div>
+              <div className="space-y-1.5"><Label>Início</Label><Input type="time" {...register("horaInicio")} /></div>
+              <div className="space-y-1.5"><Label>Fim</Label><Input type="time" {...register("horaFim")} /></div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Observações</Label>
-              <Input {...register("observacoes")} placeholder="Opcional" />
-            </div>
+            <div className="space-y-1.5"><Label>Observações</Label><Input {...register("observacoes")} placeholder="Opcional" /></div>
             <Button type="submit" className="w-full" disabled={salvar.isPending}>
               {salvar.isPending ? "Salvando..." : editando ? "Salvar Alterações" : "Agendar"}
             </Button>
@@ -267,7 +254,7 @@ function AgendaPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirmação exclusão */}
+      {/* Dialog confirmação exclusão */}
       <Dialog open={!!excluindo} onOpenChange={(o) => !o && setExcluindo(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Excluir agendamento?</DialogTitle></DialogHeader>
@@ -281,6 +268,57 @@ function AgendaPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog detalhe do agendamento */}
+      <Dialog open={!!detalhe} onOpenChange={(o) => !o && setDetalhe(null)}>
+        {detalhe && (
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Agendamento</DialogTitle></DialogHeader>
+            <div className="space-y-3 text-sm">
+              {[
+                ["Pet",          detalhe.pet?.nome ?? "-"],
+                ["Tutor",        detalhe.tutor?.nome ?? "-"],
+                ["Serviço",      detalhe.service?.nome ?? "-"],
+                ["Profissional", detalhe.professional?.nome ?? "-"],
+                ["Horário",      `${detalhe.horaInicio} – ${detalhe.horaFim}`],
+                ["Valor",        formatCurrency(detalhe.preco)],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between">
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="font-medium">{v}</span>
+                </div>
+              ))}
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Status</span>
+                <Badge variant={statusColors[detalhe.status] as any}>{detalhe.status.replace("_", " ")}</Badge>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 mt-2">
+              <Button variant="outline" className="w-full" onClick={() => { setDetalhe(null); abrirEditar(detalhe); }}>
+                <Pencil className="h-4 w-4" /> Editar agendamento
+              </Button>
+              <Button variant="outline" className="w-full" onClick={() => {
+                printTable(
+                  "Comprovante de Agendamento",
+                  ["Campo", "Informação"],
+                  [
+                    ["Pet", detalhe.pet?.nome ?? "-"],
+                    ["Tutor", detalhe.tutor?.nome ?? "-"],
+                    ["Serviço", detalhe.service?.nome ?? "-"],
+                    ["Profissional", detalhe.professional?.nome ?? "-"],
+                    ["Data", new Date(detalhe.data + "T00:00:00").toLocaleDateString("pt-BR")],
+                    ["Horário", `${detalhe.horaInicio} – ${detalhe.horaFim}`],
+                    ["Valor", formatCurrency(detalhe.preco)],
+                    ["Status", detalhe.status.replace("_", " ")],
+                  ]
+                );
+              }}>
+                <Printer className="h-4 w-4" /> Imprimir comprovante
+              </Button>
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
+
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
       ) : !data?.agendamentos.length ? (
@@ -288,7 +326,7 @@ function AgendaPage() {
       ) : (
         <div className="space-y-3">
           {data.agendamentos.map((a) => (
-            <Card key={a.id}>
+            <Card key={a.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => setDetalhe(a)}>
               <CardContent className="py-3 px-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-4">
@@ -301,7 +339,7 @@ function AgendaPage() {
                       <p className="text-xs text-muted-foreground">{a.service?.nome} · {a.professional?.nome} · {formatCurrency(a.preco)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Select value={a.status} onValueChange={(v) => mudarStatus.mutate({ id: a.id, status: v })}>
                       <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>

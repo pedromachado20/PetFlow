@@ -13,6 +13,7 @@ export const tutores = pgTable("tutores", {
   cidade: text("cidade"),
   estado: text("estado"),
   cep: text("cep"),
+  fotoUrl: text("foto_url"),
   observacoes: text("observacoes"),
   ativo: boolean("ativo").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

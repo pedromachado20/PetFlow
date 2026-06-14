@@ -10,26 +10,24 @@ const getRelatorios = createServerFn({ method: "GET" }).handler(async () => {
   const { db } = await import("~/db");
   const { tenantId } = await requireTenant();
   const { eq, and, gte, sql, count } = await import("drizzle-orm");
-  const { appointments, pets, tutores, transacoes, assinaturas } = await import("~/db/schema");
+  const { appointments, pets, tutores, transacoes, assinaturas, services } = await import("~/db/schema");
 
   const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
 
   const [
     totalPets, totalTutores, totalAgendamentos,
-    receitaMes, assinaturasAtivas,
-    topServicos,
+    receitaMes, assinaturasAtivas, topServicos,
   ] = await Promise.all([
     db.select({ count: count() }).from(pets).where(and(eq(pets.tenantId, tenantId), eq(pets.ativo, true))),
     db.select({ count: count() }).from(tutores).where(and(eq(tutores.tenantId, tenantId), eq(tutores.ativo, true))),
     db.select({ count: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), gte(appointments.data, inicioMes))),
     db.select({ total: sql<string>`coalesce(sum(valor), 0)` }).from(transacoes).where(and(eq(transacoes.tenantId, tenantId), eq(transacoes.tipo, "receita"), gte(transacoes.data, inicioMes))),
     db.select({ count: count() }).from(assinaturas).where(and(eq(assinaturas.tenantId, tenantId), eq(assinaturas.status, "ativa"))),
-    db.select({
-      serviceId: appointments.serviceId,
-      total: count(),
-    }).from(appointments)
+    db.select({ nome: services.nome, total: count() })
+      .from(appointments)
+      .leftJoin(services, eq(appointments.serviceId, services.id))
       .where(and(eq(appointments.tenantId, tenantId), gte(appointments.data, inicioMes)))
-      .groupBy(appointments.serviceId)
+      .groupBy(services.nome)
       .orderBy(sql`count(*) desc`)
       .limit(5),
   ]);
@@ -55,11 +53,13 @@ function RelatoriosPage() {
   });
 
   const kpis = [
-    { label: "Pets Cadastrados", value: data?.totalPets ?? 0, icon: PawPrint },
-    { label: "Tutores", value: data?.totalTutores ?? 0, icon: Users },
-    { label: "Agendamentos no Mês", value: data?.totalAgendamentos ?? 0, icon: BarChart3 },
-    { label: "Assinaturas Ativas", value: data?.assinaturasAtivas ?? 0, icon: TrendingUp },
+    { label: "Pets Cadastrados",     value: data?.totalPets ?? 0,          icon: PawPrint },
+    { label: "Tutores",               value: data?.totalTutores ?? 0,       icon: Users },
+    { label: "Agendamentos no Mês",  value: data?.totalAgendamentos ?? 0,  icon: BarChart3 },
+    { label: "Assinaturas Ativas",   value: data?.assinaturasAtivas ?? 0,  icon: TrendingUp },
   ];
+
+  const maxTop = Math.max(...(data?.topServicos.map((s) => s.total) ?? [1]), 1);
 
   return (
     <div className="space-y-6">
@@ -78,7 +78,7 @@ function RelatoriosPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base">Receita do Mês</CardTitle>
         </CardHeader>
         <CardContent>
@@ -94,13 +94,21 @@ function RelatoriosPage() {
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Carregando...</p>
           ) : !data?.topServicos.length ? (
-            <p className="text-sm text-muted-foreground">Sem dados este mês</p>
+            <p className="text-sm text-muted-foreground">Sem agendamentos este mês</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {data.topServicos.map((s, i) => (
-                <div key={s.serviceId} className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">#{i + 1} {s.serviceId}</span>
-                  <span className="font-semibold">{s.total} agendamentos</span>
+                <div key={i} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">#{i + 1} {s.nome ?? "Serviço removido"}</span>
+                    <span className="text-muted-foreground">{s.total} agendamento{s.total !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${(s.total / maxTop) * 100}%` }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

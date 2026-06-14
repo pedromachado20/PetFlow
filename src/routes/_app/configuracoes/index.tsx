@@ -1,13 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Switch } from "~/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toast } from "sonner";
 
 const getConfig = createServerFn({ method: "GET" }).handler(async () => {
@@ -20,7 +23,7 @@ const getConfig = createServerFn({ method: "GET" }).handler(async () => {
   return db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
 });
 
-const salvarConfig = createServerFn({ method: "POST" })
+const salvarDados = createServerFn({ method: "POST" })
   .validator(z.object({
     nome: z.string().min(2),
     email: z.string().email(),
@@ -36,11 +39,46 @@ const salvarConfig = createServerFn({ method: "POST" })
     const { tenantId } = await requireTenant();
     const { eq } = await import("drizzle-orm");
     const { tenants } = await import("~/db/schema");
-
     await db.update(tenants).set({ ...data, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
   });
 
-const schema = z.object({
+const salvarWhatsapp = createServerFn({ method: "POST" })
+  .validator(z.object({
+    whatsappAtivo: z.boolean(),
+    whatsappProvider: z.string(),
+    evolutionApiUrl: z.string().optional(),
+    evolutionApiKey: z.string().optional(),
+    evolutionInstance: z.string().optional(),
+    zapiClientToken: z.string().optional(),
+  }))
+  .handler(async ({ data }) => {
+    const { requireTenant } = await import("~/server/context");
+    const { db } = await import("~/db");
+    const { tenantId } = await requireTenant();
+    const { eq } = await import("drizzle-orm");
+    const { tenants } = await import("~/db/schema");
+    await db.update(tenants).set({ ...data, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+  });
+
+const salvarNotificacoes = createServerFn({ method: "POST" })
+  .validator(z.object({
+    notifAgendamento: z.boolean(),
+    notifConfirmacao: z.boolean(),
+    notifLembrete: z.boolean(),
+    notifBemVindo: z.boolean(),
+    notifVacina: z.boolean(),
+    notifVencimento: z.boolean(),
+  }))
+  .handler(async ({ data }) => {
+    const { requireTenant } = await import("~/server/context");
+    const { db } = await import("~/db");
+    const { tenantId } = await requireTenant();
+    const { eq } = await import("drizzle-orm");
+    const { tenants } = await import("~/db/schema");
+    await db.update(tenants).set({ ...data, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+  });
+
+const schemaDados = z.object({
   nome: z.string().min(2),
   email: z.string().email(),
   telefone: z.string().optional(),
@@ -62,8 +100,9 @@ function ConfiguracoesPage() {
     queryFn: () => getConfig(),
   });
 
+  // --- Dados do pet shop ---
   const { register, handleSubmit, formState: { errors } } = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schemaDados),
     values: data ? {
       nome: data.nome,
       email: data.email,
@@ -75,22 +114,62 @@ function ConfiguracoesPage() {
     } : undefined,
   });
 
-  const salvar = useMutation({
-    mutationFn: (values: z.infer<typeof schema>) => salvarConfig({ data: values }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["configuracoes"] }); toast.success("Configurações salvas"); },
+  const salvarDadosMut = useMutation({
+    mutationFn: (v: z.infer<typeof schemaDados>) => salvarDados({ data: v }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["configuracoes"] }); toast.success("Dados salvos"); },
     onError: () => toast.error("Erro ao salvar"),
+  });
+
+  // --- WhatsApp ---
+  const [provider, setProvider] = useState(data?.whatsappProvider ?? "nenhum");
+  const [whatsappAtivo, setWhatsappAtivo] = useState(data?.whatsappAtivo ?? false);
+  const [evolutionUrl, setEvolutionUrl] = useState(data?.evolutionApiUrl ?? "");
+  const [evolutionKey, setEvolutionKey] = useState(data?.evolutionApiKey ?? "");
+  const [evolutionInstance, setEvolutionInstance] = useState(data?.evolutionInstance ?? "");
+  const [zapiToken, setZapiToken] = useState(data?.zapiClientToken ?? "");
+
+  const salvarWppMut = useMutation({
+    mutationFn: () => salvarWhatsapp({
+      data: {
+        whatsappAtivo,
+        whatsappProvider: provider,
+        evolutionApiUrl: evolutionUrl || undefined,
+        evolutionApiKey: evolutionKey || undefined,
+        evolutionInstance: evolutionInstance || undefined,
+        zapiClientToken: zapiToken || undefined,
+      },
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["configuracoes"] }); toast.success("WhatsApp salvo"); },
+    onError: () => toast.error("Erro ao salvar WhatsApp"),
+  });
+
+  // --- Notificações ---
+  const [notifs, setNotifs] = useState({
+    notifAgendamento: data?.notifAgendamento ?? false,
+    notifConfirmacao: data?.notifConfirmacao ?? false,
+    notifLembrete: data?.notifLembrete ?? false,
+    notifBemVindo: data?.notifBemVindo ?? false,
+    notifVacina: data?.notifVacina ?? false,
+    notifVencimento: data?.notifVencimento ?? false,
+  });
+
+  const salvarNotifMut = useMutation({
+    mutationFn: () => salvarNotificacoes({ data: notifs }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["configuracoes"] }); toast.success("Notificações salvas"); },
+    onError: () => toast.error("Erro ao salvar notificações"),
   });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
   return (
     <div className="max-w-xl space-y-6">
+      {/* Dados do Pet Shop */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Dados do Pet Shop / Clínica</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit((v) => salvar.mutate(v))} className="space-y-4">
+          <form onSubmit={handleSubmit((v) => salvarDadosMut.mutate(v))} className="space-y-4">
             <div className="space-y-1.5">
               <Label>Nome *</Label>
               <Input {...register("nome")} />
@@ -124,10 +203,115 @@ function ConfiguracoesPage() {
                 <Input {...register("estado")} maxLength={2} placeholder="SP" />
               </div>
             </div>
-            <Button type="submit" disabled={salvar.isPending}>
-              {salvar.isPending ? "Salvando..." : "Salvar Alterações"}
+            <Button type="submit" disabled={salvarDadosMut.isPending}>
+              {salvarDadosMut.isPending ? "Salvando..." : "Salvar Dados"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* WhatsApp */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">WhatsApp</CardTitle>
+          <CardDescription>Configure a integração para envio de mensagens automáticas</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label>Ativar WhatsApp</Label>
+            <Switch checked={whatsappAtivo} onCheckedChange={setWhatsappAtivo} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Provedor</Label>
+            <Select value={provider} onValueChange={setProvider}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nenhum">Nenhum</SelectItem>
+                <SelectItem value="z-api">Z-API</SelectItem>
+                <SelectItem value="evolution">Evolution API</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {provider === "z-api" && (
+            <div className="space-y-1.5">
+              <Label>Client Token (Z-API)</Label>
+              <Input
+                value={zapiToken}
+                onChange={(e) => setZapiToken(e.target.value)}
+                placeholder="Client-Token do Z-API"
+              />
+            </div>
+          )}
+
+          {provider === "evolution" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>URL da Evolution API</Label>
+                <Input
+                  value={evolutionUrl}
+                  onChange={(e) => setEvolutionUrl(e.target.value)}
+                  placeholder="https://sua-evolution.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>API Key</Label>
+                <Input
+                  value={evolutionKey}
+                  onChange={(e) => setEvolutionKey(e.target.value)}
+                  placeholder="Sua API Key"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Nome da Instância</Label>
+                <Input
+                  value={evolutionInstance}
+                  onChange={(e) => setEvolutionInstance(e.target.value)}
+                  placeholder="minha-instancia"
+                />
+              </div>
+            </div>
+          )}
+
+          <Button onClick={() => salvarWppMut.mutate()} disabled={salvarWppMut.isPending}>
+            {salvarWppMut.isPending ? "Salvando..." : "Salvar WhatsApp"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Notificações */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Notificações Automáticas</CardTitle>
+          <CardDescription>Mensagens enviadas automaticamente via WhatsApp</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {[
+            { key: "notifBemVindo", label: "Boas-vindas", desc: "Quando um novo tutor se cadastra" },
+            { key: "notifAgendamento", label: "Novo agendamento", desc: "Confirmação ao agendar" },
+            { key: "notifConfirmacao", label: "Confirmação", desc: "Lembrete de confirmação do tutor" },
+            { key: "notifLembrete", label: "Lembrete", desc: "Aviso antes do horário agendado" },
+            { key: "notifVacina", label: "Vacina vencendo", desc: "Aviso quando a próxima dose se aproxima" },
+            { key: "notifVencimento", label: "Plano vencendo", desc: "Aviso de renovação de plano" },
+          ].map(({ key, label, desc }) => (
+            <div key={key} className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+              </div>
+              <Switch
+                checked={notifs[key as keyof typeof notifs]}
+                onCheckedChange={(v) => setNotifs((prev) => ({ ...prev, [key]: v }))}
+              />
+            </div>
+          ))}
+
+          <Button onClick={() => salvarNotifMut.mutate()} disabled={salvarNotifMut.isPending}>
+            {salvarNotifMut.isPending ? "Salvando..." : "Salvar Notificações"}
+          </Button>
         </CardContent>
       </Card>
     </div>

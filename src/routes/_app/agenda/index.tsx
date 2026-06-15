@@ -133,6 +133,11 @@ function AgendaPage() {
   const [horaFimSel, setHoraFimSel] = useState("");
   const [obsVal, setObsVal] = useState("");
 
+  const { data, isLoading } = useQuery({
+    queryKey: ["agenda", dataAtual],
+    queryFn: () => getAgenda({ data: { data: dataAtual } }),
+  });
+
   function abrirNovo() {
     setEditando(null);
     setPetSel(""); setProSel(""); setSvcSel("");

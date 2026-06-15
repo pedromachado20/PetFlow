@@ -333,7 +333,7 @@ function PetsPage() {
                   {p.dataNascimento && <span>{calcularIdadePet(p.dataNascimento)}</span>}
                 </div>
                 <div className="flex gap-1 pt-1 border-t border-border">
-                  <Link to="/_app/pets/$petId" params={{ petId: p.id }} className="flex-1">
+                  <Link to="/pets/$petId" params={{ petId: p.id }} className="flex-1">
                     <Button variant="ghost" size="sm" className="w-full h-7 text-xs">
                       <ClipboardList className="h-3.5 w-3.5" /> Prontuário
                     </Button>

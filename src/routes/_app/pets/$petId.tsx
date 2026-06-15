@@ -342,9 +342,9 @@ function TabDados({
   const [foto, setFoto] = useState<string | null>(pet.fotoUrl ?? null);
   const [castrado, setCastrado] = useState(pet.castrado);
   const [tutorSel, setTutorSel] = useState(pet.tutorId);
-  const [especieSel, setEspecieSel] = useState(pet.especie);
-  const [sexoSel, setSexoSel] = useState(pet.sexo);
-  const [porteSel, setPorteSel] = useState(pet.porte);
+  const [especieSel, setEspecieSel] = useState<string>(pet.especie);
+  const [sexoSel, setSexoSel] = useState<string>(pet.sexo);
+  const [porteSel, setPorteSel] = useState<string>(pet.porte);
 
   const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm({
     resolver: zodResolver(petSchema),
@@ -808,7 +808,7 @@ function TabVacinas({
     onError: () => toast.error("Erro ao remover vacina"),
   });
 
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = new Date().toISOString().split("T")[0] ?? "";
 
   return (
     <>
@@ -964,7 +964,7 @@ function PetDetalhePage() {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <Link to="/_app/pets/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <Link to="/pets" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" /> Voltar para Pets
       </Link>
 

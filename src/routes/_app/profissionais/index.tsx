@@ -14,6 +14,7 @@ import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { ImageUpload } from "~/components/ui/image-upload";
 import { toast } from "sonner";
 import { formatPhone } from "~/lib/utils";
 
@@ -38,6 +39,7 @@ const salvarProfissional = createServerFn({ method: "POST" })
     email: z.string().optional(),
     crmv: z.string().optional(),
     comissao: z.string().optional(),
+    fotoUrl: z.string().optional(),
   }))
   .handler(async ({ data }) => {
     const { requireTenant } = await import("~/server/context");
@@ -45,7 +47,7 @@ const salvarProfissional = createServerFn({ method: "POST" })
     const { tenantId } = await requireTenant();
     const { professionals } = await import("~/db/schema");
     const { eq, and } = await import("drizzle-orm");
-    const payload = { ...data, especialidade: data.especialidade as any, email: data.email || undefined };
+    const payload = { ...data, especialidade: data.especialidade as any, email: data.email || undefined, fotoUrl: data.fotoUrl || undefined };
     if (data.id) {
       await db.update(professionals).set({ ...payload, updatedAt: new Date() }).where(and(eq(professionals.id, data.id), eq(professionals.tenantId, tenantId)));
     } else {
@@ -83,6 +85,15 @@ const especialidades = [
 
 type Profissional = Awaited<ReturnType<typeof getProfissionais>>[number];
 
+function Avatar({ nome, fotoUrl }: { nome: string; fotoUrl?: string | null }) {
+  if (fotoUrl) return <img src={fotoUrl} alt={nome} className="h-10 w-10 rounded-full object-cover shrink-0" />;
+  return (
+    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+      <span className="text-sm font-bold text-primary">{nome.charAt(0).toUpperCase()}</span>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/_app/profissionais/")({
   component: ProfissionaisPage,
 });
@@ -93,6 +104,7 @@ function ProfissionaisPage() {
   const [editando, setEditando] = useState<Profissional | null>(null);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [espSel, setEspSel] = useState("");
+  const [foto, setFoto] = useState<string | null>(null);
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["profissionais"],
@@ -104,6 +116,7 @@ function ProfissionaisPage() {
   function abrirNovo() {
     setEditando(null);
     setEspSel("");
+    setFoto(null);
     reset({ nome: "", especialidade: "", telefone: "", email: "", crmv: "", comissao: "" });
     setOpen(true);
   }
@@ -111,13 +124,14 @@ function ProfissionaisPage() {
   function abrirEditar(p: Profissional) {
     setEditando(p);
     setEspSel(p.especialidade);
+    setFoto(p.fotoUrl ?? null);
     reset({ nome: p.nome, especialidade: p.especialidade, telefone: p.telefone ?? "", email: p.email ?? "", crmv: p.crmv ?? "", comissao: p.comissao ?? "" });
     setOpen(true);
   }
 
   const salvar = useMutation({
     mutationFn: (values: z.infer<typeof schema>) =>
-      salvarProfissional({ data: { ...values, id: editando?.id } }),
+      salvarProfissional({ data: { ...values, id: editando?.id, fotoUrl: foto ?? undefined } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profissionais"] });
       toast.success(editando ? "Profissional atualizado" : "Profissional cadastrado");
@@ -190,6 +204,7 @@ function ProfissionaisPage() {
                 <Input {...register("comissao")} placeholder="0" />
               </div>
             </div>
+            <ImageUpload label="Foto do Profissional" value={foto} onChange={setFoto} />
             <Button type="submit" className="w-full" disabled={salvar.isPending}>
               {salvar.isPending ? "Salvando..." : editando ? "Salvar Alterações" : "Cadastrar"}
             </Button>
@@ -219,9 +234,12 @@ function ProfissionaisPage() {
           {data.map((p) => (
             <Card key={p.id}>
               <CardContent className="p-4 space-y-2">
-                <div className="flex items-start justify-between">
-                  <p className="font-semibold">{p.nome}</p>
-                  <Badge variant="outline">{especialidades.find((e) => e.value === p.especialidade)?.label ?? p.especialidade}</Badge>
+                <div className="flex items-center gap-3">
+                  <Avatar nome={p.nome} fotoUrl={p.fotoUrl} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{p.nome}</p>
+                    <Badge variant="outline" className="text-xs">{especialidades.find((e) => e.value === p.especialidade)?.label ?? p.especialidade}</Badge>
+                  </div>
                 </div>
                 {p.telefone && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

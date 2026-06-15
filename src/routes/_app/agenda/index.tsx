@@ -4,8 +4,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2, Printer, Info } from "lucide-react";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -130,33 +128,39 @@ function AgendaPage() {
   const [petSel, setPetSel] = useState("");
   const [proSel, setProSel] = useState("");
   const [svcSel, setSvcSel] = useState("");
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["agenda", dataAtual],
-    queryFn: () => getAgenda({ data: { data: dataAtual } }),
-  });
-
-  const { register, handleSubmit, setValue, reset } = useForm({ resolver: zodResolver(schema) });
+  const [dataSel, setDataSel] = useState(dataAtual);
+  const [horaInicioSel, setHoraInicioSel] = useState("");
+  const [horaFimSel, setHoraFimSel] = useState("");
+  const [obsVal, setObsVal] = useState("");
 
   function abrirNovo() {
     setEditando(null);
     setPetSel(""); setProSel(""); setSvcSel("");
-    reset({ data: dataAtual, horaInicio: "", horaFim: "", observacoes: "" });
+    setDataSel(dataAtual); setHoraInicioSel(""); setHoraFimSel(""); setObsVal("");
     setOpen(true);
   }
 
   function abrirEditar(a: Agendamento) {
     setEditando(a);
-    setPetSel(a.petId);           setValue("petId", a.petId);
-    setProSel(a.professionalId);  setValue("professionalId", a.professionalId);
-    setSvcSel(a.serviceId);       setValue("serviceId", a.serviceId);
-    reset({ petId: a.petId, professionalId: a.professionalId, serviceId: a.serviceId, data: a.data, horaInicio: a.horaInicio, horaFim: a.horaFim, observacoes: a.observacoes ?? "" });
-    setTimeout(() => { setValue("petId", a.petId); setValue("professionalId", a.professionalId); setValue("serviceId", a.serviceId); }, 0);
+    setPetSel(a.petId);
+    setProSel(a.professionalId);
+    setSvcSel(a.serviceId);
+    setDataSel(a.data);
+    setHoraInicioSel(a.horaInicio);
+    setHoraFimSel(a.horaFim);
+    setObsVal(a.observacoes ?? "");
     setOpen(true);
   }
 
+  function buildPayload() {
+    return {
+      petId: petSel, professionalId: proSel, serviceId: svcSel,
+      data: dataSel, horaInicio: horaInicioSel, horaFim: horaFimSel, observacoes: obsVal,
+    };
+  }
+
   const salvar = useMutation({
-    mutationFn: (values: z.infer<typeof schema>) => salvarAgendamento({ data: { ...values, id: editando?.id } }),
+    mutationFn: () => salvarAgendamento({ data: { ...buildPayload(), id: editando?.id } }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["agenda"] }); toast.success(editando ? "Atualizado" : "Agendado"); setOpen(false); },
     onError: () => toast.error("Erro ao salvar"),
   });
@@ -219,34 +223,46 @@ function AgendaPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editando ? "Editar Agendamento" : "Novo Agendamento"}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit((v) => salvar.mutate(v))} className="space-y-3">
+          <form onSubmit={(e) => { e.preventDefault(); if (!petSel || !proSel || !svcSel || !dataSel || !horaInicioSel || !horaFimSel) { toast.error("Preencha todos os campos obrigatórios"); return; } salvar.mutate(); }} className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Pet</Label>
-              <Select value={petSel} onValueChange={(v) => { setPetSel(v); setValue("petId", v); }}>
+              <Label>Pet *</Label>
+              <Select value={petSel} onValueChange={setPetSel}>
                 <SelectTrigger><SelectValue placeholder="Selecione o pet" /></SelectTrigger>
                 <SelectContent>{data?.pets.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome} ({p.tutor?.nome})</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Profissional</Label>
-              <Select value={proSel} onValueChange={(v) => { setProSel(v); setValue("professionalId", v); }}>
+              <Label>Profissional *</Label>
+              <Select value={proSel} onValueChange={setProSel}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{data?.profissionais.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Serviço</Label>
-              <Select value={svcSel} onValueChange={(v) => { setSvcSel(v); setValue("serviceId", v); }}>
+              <Label>Serviço *</Label>
+              <Select value={svcSel} onValueChange={setSvcSel}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{data?.servicos.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome} — {formatCurrency(s.preco)}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1.5 col-span-1"><Label>Data</Label><Input type="date" {...register("data")} /></div>
-              <div className="space-y-1.5"><Label>Início</Label><Input type="time" {...register("horaInicio")} /></div>
-              <div className="space-y-1.5"><Label>Fim</Label><Input type="time" {...register("horaFim")} /></div>
+              <div className="space-y-1.5">
+                <Label>Data *</Label>
+                <Input type="date" value={dataSel} onChange={(e) => setDataSel(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Início *</Label>
+                <Input type="time" value={horaInicioSel} onChange={(e) => setHoraInicioSel(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fim *</Label>
+                <Input type="time" value={horaFimSel} onChange={(e) => setHoraFimSel(e.target.value)} />
+              </div>
             </div>
-            <div className="space-y-1.5"><Label>Observações</Label><Input {...register("observacoes")} placeholder="Opcional" /></div>
+            <div className="space-y-1.5">
+              <Label>Observações</Label>
+              <Input value={obsVal} onChange={(e) => setObsVal(e.target.value)} placeholder="Opcional" />
+            </div>
             <Button type="submit" className="w-full" disabled={salvar.isPending}>
               {salvar.isPending ? "Salvando..." : editando ? "Salvar Alterações" : "Agendar"}
             </Button>

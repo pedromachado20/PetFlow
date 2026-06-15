@@ -59,8 +59,9 @@ const getCaixa = createServerFn({ method: "GET" })
     // Mark paid
     for (const pag of pagamentos) {
       if (!pag.referencia?.startsWith("caixa-")) continue;
-      // referencia format: caixa-{tutorId}-{data}
-      const tutorId = pag.referencia.slice(6, pag.referencia.lastIndexOf("-"));
+      // referencia format: caixa-{tutorId}-YYYY-MM-DD
+      // date is always 10 chars + 1 separator = 11 chars from the end
+      const tutorId = pag.referencia.slice(6, -11);
       const g = map.get(tutorId);
       if (g) {
         g.pago = true;
@@ -151,11 +152,13 @@ function CaixaPage() {
         },
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["caixa", dataAtual] });
-      // Re-select updated group
       const fresh = await getCaixa({ data: { data: dataAtual } });
-      const updated = fresh.grupos.find((g) => g.tutor.id === selecionado?.tutor.id);
-      if (updated) setSelecionado(updated);
+      qc.setQueryData(["caixa", dataAtual], fresh);
+      const tutorId = selecionado?.tutor.id;
+      if (tutorId) {
+        const updated = fresh.grupos.find((g) => g.tutor.id === tutorId);
+        if (updated) setSelecionado(updated);
+      }
       toast.success("Pagamento registrado!");
     },
     onError: (e: any) => toast.error(e.message ?? "Erro ao registrar pagamento"),

@@ -96,10 +96,10 @@ type Pet = Awaited<ReturnType<typeof getPets>>["pets"][number];
 
 function PetAvatar({ nome, fotoUrl, especie }: { nome: string; fotoUrl?: string | null; especie: string }) {
   if (fotoUrl) {
-    return <img src={fotoUrl} alt={nome} className="h-10 w-10 rounded-full object-cover shrink-0" />;
+    return <img src={fotoUrl} alt={nome} className="h-16 w-16 rounded-full object-cover shrink-0" />;
   }
   return (
-    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
       <span className="text-sm">{especieLabel(especie).charAt(0)}</span>
     </div>
   );

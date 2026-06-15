@@ -76,11 +76,10 @@ const schema = z.object({
 
 type Tutor = Awaited<ReturnType<typeof getTutores>>[number];
 
-function Avatar({ nome, fotoUrl, size = 10 }: { nome: string; fotoUrl?: string | null; size?: number }) {
-  const cls = `h-${size} w-${size} rounded-full object-cover shrink-0`;
-  if (fotoUrl) return <img src={fotoUrl} alt={nome} className={cls} />;
+function Avatar({ nome, fotoUrl }: { nome: string; fotoUrl?: string | null }) {
+  if (fotoUrl) return <img src={fotoUrl} alt={nome} className="h-10 w-10 rounded-full object-cover shrink-0" />;
   return (
-    <div className={`h-${size} w-${size} rounded-full bg-primary/10 flex items-center justify-center shrink-0`}>
+    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
       <span className="text-sm font-bold text-primary">{nome.charAt(0).toUpperCase()}</span>
     </div>
   );
@@ -236,7 +235,7 @@ function TutoresPage() {
             <Card key={t.id} className="hover:border-primary/40 transition-colors">
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center gap-3">
-                  <Avatar nome={t.nome} fotoUrl={t.fotoUrl} size={10} />
+                  <Avatar nome={t.nome} fotoUrl={t.fotoUrl} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate">{t.nome}</p>
                     {t.cidade && <p className="text-xs text-muted-foreground">{t.cidade}{t.estado ? ` - ${t.estado}` : ""}</p>}

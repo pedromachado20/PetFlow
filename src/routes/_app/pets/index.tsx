@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2, Printer } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Printer, ClipboardList } from "lucide-react";
 import { printTable } from "~/lib/pdf";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -333,11 +333,16 @@ function PetsPage() {
                   {p.dataNascimento && <span>{calcularIdadePet(p.dataNascimento)}</span>}
                 </div>
                 <div className="flex gap-1 pt-1 border-t border-border">
-                  <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs" onClick={() => abrirEditar(p)}>
-                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  <Link to="/_app/pets/$petId" params={{ petId: p.id }} className="flex-1">
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-xs">
+                      <ClipboardList className="h-3.5 w-3.5" /> Prontuário
+                    </Button>
+                  </Link>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => abrirEditar(p)}>
+                    <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs text-destructive hover:text-destructive" onClick={() => setExcluindo(p.id)}>
-                    <Trash2 className="h-3.5 w-3.5" /> Excluir
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => setExcluindo(p.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </CardContent>

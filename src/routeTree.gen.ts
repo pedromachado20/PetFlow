@@ -26,6 +26,7 @@ import { Route as AppPetsIndexImport } from './routes/_app/pets/index'
 import { Route as AppFinanceiroIndexImport } from './routes/_app/financeiro/index'
 import { Route as AppConfiguracoesIndexImport } from './routes/_app/configuracoes/index'
 import { Route as AppCaixaIndexImport } from './routes/_app/caixa/index'
+import { Route as AppAjudaIndexImport } from './routes/_app/ajuda/index'
 import { Route as AppAgendaIndexImport } from './routes/_app/agenda/index'
 import { Route as AppPetsPetIdImport } from './routes/_app/pets/$petId'
 
@@ -120,6 +121,12 @@ const AppCaixaIndexRoute = AppCaixaIndexImport.update({
   getParentRoute: () => AppRoute,
 } as any)
 
+const AppAjudaIndexRoute = AppAjudaIndexImport.update({
+  id: '/ajuda/',
+  path: '/ajuda/',
+  getParentRoute: () => AppRoute,
+} as any)
+
 const AppAgendaIndexRoute = AppAgendaIndexImport.update({
   id: '/agenda/',
   path: '/agenda/',
@@ -183,6 +190,13 @@ declare module '@tanstack/react-router' {
       path: '/agenda'
       fullPath: '/agenda'
       preLoaderRoute: typeof AppAgendaIndexImport
+      parentRoute: typeof AppImport
+    }
+    '/_app/ajuda/': {
+      id: '/_app/ajuda/'
+      path: '/ajuda'
+      fullPath: '/ajuda'
+      preLoaderRoute: typeof AppAjudaIndexImport
       parentRoute: typeof AppImport
     }
     '/_app/caixa/': {
@@ -264,6 +278,7 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppPetsPetIdRoute: typeof AppPetsPetIdRoute
   AppAgendaIndexRoute: typeof AppAgendaIndexRoute
+  AppAjudaIndexRoute: typeof AppAjudaIndexRoute
   AppCaixaIndexRoute: typeof AppCaixaIndexRoute
   AppConfiguracoesIndexRoute: typeof AppConfiguracoesIndexRoute
   AppFinanceiroIndexRoute: typeof AppFinanceiroIndexRoute
@@ -280,6 +295,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppPetsPetIdRoute: AppPetsPetIdRoute,
   AppAgendaIndexRoute: AppAgendaIndexRoute,
+  AppAjudaIndexRoute: AppAjudaIndexRoute,
   AppCaixaIndexRoute: AppCaixaIndexRoute,
   AppConfiguracoesIndexRoute: AppConfiguracoesIndexRoute,
   AppFinanceiroIndexRoute: AppFinanceiroIndexRoute,
@@ -302,6 +318,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingIndexRoute
   '/pets/$petId': typeof AppPetsPetIdRoute
   '/agenda': typeof AppAgendaIndexRoute
+  '/ajuda': typeof AppAjudaIndexRoute
   '/caixa': typeof AppCaixaIndexRoute
   '/configuracoes': typeof AppConfiguracoesIndexRoute
   '/financeiro': typeof AppFinanceiroIndexRoute
@@ -322,6 +339,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingIndexRoute
   '/pets/$petId': typeof AppPetsPetIdRoute
   '/agenda': typeof AppAgendaIndexRoute
+  '/ajuda': typeof AppAjudaIndexRoute
   '/caixa': typeof AppCaixaIndexRoute
   '/configuracoes': typeof AppConfiguracoesIndexRoute
   '/financeiro': typeof AppFinanceiroIndexRoute
@@ -343,6 +361,7 @@ export interface FileRoutesById {
   '/onboarding/': typeof OnboardingIndexRoute
   '/_app/pets/$petId': typeof AppPetsPetIdRoute
   '/_app/agenda/': typeof AppAgendaIndexRoute
+  '/_app/ajuda/': typeof AppAjudaIndexRoute
   '/_app/caixa/': typeof AppCaixaIndexRoute
   '/_app/configuracoes/': typeof AppConfiguracoesIndexRoute
   '/_app/financeiro/': typeof AppFinanceiroIndexRoute
@@ -365,6 +384,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pets/$petId'
     | '/agenda'
+    | '/ajuda'
     | '/caixa'
     | '/configuracoes'
     | '/financeiro'
@@ -384,6 +404,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pets/$petId'
     | '/agenda'
+    | '/ajuda'
     | '/caixa'
     | '/configuracoes'
     | '/financeiro'
@@ -403,6 +424,7 @@ export interface FileRouteTypes {
     | '/onboarding/'
     | '/_app/pets/$petId'
     | '/_app/agenda/'
+    | '/_app/ajuda/'
     | '/_app/caixa/'
     | '/_app/configuracoes/'
     | '/_app/financeiro/'
@@ -455,6 +477,7 @@ export const routeTree = rootRoute
         "/_app/dashboard",
         "/_app/pets/$petId",
         "/_app/agenda/",
+        "/_app/ajuda/",
         "/_app/caixa/",
         "/_app/configuracoes/",
         "/_app/financeiro/",
@@ -483,6 +506,10 @@ export const routeTree = rootRoute
     },
     "/_app/agenda/": {
       "filePath": "_app/agenda/index.tsx",
+      "parent": "/_app"
+    },
+    "/_app/ajuda/": {
+      "filePath": "_app/ajuda/index.tsx",
       "parent": "/_app"
     },
     "/_app/caixa/": {

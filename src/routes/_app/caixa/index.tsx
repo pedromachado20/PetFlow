@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Search, CheckCircle2, Printer, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, CheckCircle2, Printer, FileText, Plus, Minus, ShoppingCart } from "lucide-react";
 import { z } from "zod";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -21,9 +21,9 @@ const getCaixa = createServerFn({ method: "GET" })
     const { db } = await import("~/db");
     const { tenantId } = await requireTenant();
     const { eq, and } = await import("drizzle-orm");
-    const { appointments, transacoes, tenants } = await import("~/db/schema");
+    const { appointments, transacoes, tenants, produtos } = await import("~/db/schema");
 
-    const [appts, pagamentos, tenant] = await Promise.all([
+    const [appts, pagamentos, tenant, catalogoProdutos] = await Promise.all([
       db.query.appointments.findMany({
         where: and(eq(appointments.tenantId, tenantId), eq(appointments.data, data)),
         with: { tutor: true, pet: true, professional: true, service: true },
@@ -34,9 +34,12 @@ const getCaixa = createServerFn({ method: "GET" })
         columns: { referencia: true, valor: true, categoria: true },
       }),
       db.query.tenants.findFirst({ where: eq(tenants.id, tenantId), columns: { nome: true } }),
+      db.query.produtos.findMany({
+        where: and(eq(produtos.tenantId, tenantId), eq(produtos.ativo, true)),
+        orderBy: (p, { asc }) => [asc(p.categoria), asc(p.nome)],
+      }),
     ]);
 
-    // Group appointments by tutor
     const map = new Map<string, {
       tutor: NonNullable<(typeof appts)[0]["tutor"]>;
       appointments: typeof appts;
@@ -56,11 +59,8 @@ const getCaixa = createServerFn({ method: "GET" })
       g.total += parseFloat(a.preco ?? "0");
     }
 
-    // Mark paid
     for (const pag of pagamentos) {
       if (!pag.referencia?.startsWith("caixa-")) continue;
-      // referencia format: caixa-{tutorId}-YYYY-MM-DD
-      // date is always 10 chars + 1 separator = 11 chars from the end
       const tutorId = pag.referencia.slice(6, -11);
       const g = map.get(tutorId);
       if (g) {
@@ -70,7 +70,7 @@ const getCaixa = createServerFn({ method: "GET" })
       }
     }
 
-    return { grupos: Array.from(map.values()), nomePetShop: tenant?.nome ?? "Pet Shop" };
+    return { grupos: Array.from(map.values()), nomePetShop: tenant?.nome ?? "Pet Shop", catalogoProdutos };
   });
 
 const registrarPagamento = createServerFn({ method: "POST" })
@@ -109,13 +109,16 @@ const registrarPagamento = createServerFn({ method: "POST" })
     });
   });
 
-/* ── payment method button ────────────────────────────────────────────── */
+/* ── types ────────────────────────────────────────────────────────────── */
+
+type Grupo = Awaited<ReturnType<typeof getCaixa>>["grupos"][number];
+type ProdutoItem = { produtoId: string; nome: string; preco: number; qty: number };
 
 const formas = [
   { key: "Dinheiro", icon: "💵" },
-  { key: "PIX",     icon: "📱" },
-  { key: "Débito",  icon: "💳" },
-  { key: "Crédito", icon: "💳" },
+  { key: "PIX",      icon: "📱" },
+  { key: "Débito",   icon: "💳" },
+  { key: "Crédito",  icon: "💳" },
 ];
 
 /* ── route ────────────────────────────────────────────────────────────── */
@@ -124,8 +127,6 @@ export const Route = createFileRoute("/_app/caixa/")({
   component: CaixaPage,
 });
 
-type Grupo = Awaited<ReturnType<typeof getCaixa>>["grupos"][number];
-
 function CaixaPage() {
   const qc = useQueryClient();
   const [dataAtual, setDataAtual] = useState(() => new Date().toISOString().slice(0, 10));
@@ -133,6 +134,7 @@ function CaixaPage() {
   const [selecionado, setSelecionado] = useState<Grupo | null>(null);
   const [desconto, setDesconto] = useState("0");
   const [formaPagamento, setFormaPagamento] = useState("Dinheiro");
+  const [carrinho, setCarrinho] = useState<ProdutoItem[]>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["caixa", dataAtual],
@@ -159,6 +161,7 @@ function CaixaPage() {
         const updated = fresh.grupos.find((g) => g.tutor.id === tutorId);
         if (updated) setSelecionado(updated);
       }
+      setCarrinho([]);
       toast.success("Pagamento registrado!");
     },
     onError: (e: any) => toast.error(e.message ?? "Erro ao registrar pagamento"),
@@ -169,6 +172,30 @@ function CaixaPage() {
     d.setDate(d.getDate() + delta);
     setDataAtual(d.toISOString().slice(0, 10));
     setSelecionado(null);
+    setCarrinho([]);
+  }
+
+  function selecionarCliente(g: Grupo) {
+    setSelecionado(g);
+    setDesconto("0");
+    setCarrinho([]);
+  }
+
+  function adicionarProduto(p: { id: string; nome: string; preco: string }) {
+    setCarrinho((prev) => {
+      const existente = prev.find((i) => i.produtoId === p.id);
+      if (existente) return prev.map((i) => i.produtoId === p.id ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, { produtoId: p.id, nome: p.nome, preco: parseFloat(p.preco), qty: 1 }];
+    });
+  }
+
+  function removerProduto(produtoId: string) {
+    setCarrinho((prev) => {
+      const existente = prev.find((i) => i.produtoId === produtoId);
+      if (!existente) return prev;
+      if (existente.qty <= 1) return prev.filter((i) => i.produtoId !== produtoId);
+      return prev.map((i) => i.produtoId === produtoId ? { ...i, qty: i.qty - 1 } : i);
+    });
   }
 
   const grupos = (data?.grupos ?? []).filter((g) => {
@@ -177,19 +204,28 @@ function CaixaPage() {
   });
 
   const descontoNum = parseFloat(desconto || "0") || 0;
-  const subtotal = selecionado?.appointments.reduce((s, a) => s + parseFloat(a.preco ?? "0"), 0) ?? 0;
+  const subtotalServicos = selecionado?.appointments.reduce((s, a) => s + parseFloat(a.preco ?? "0"), 0) ?? 0;
+  const subtotalProdutos = carrinho.reduce((s, i) => s + i.preco * i.qty, 0);
+  const subtotal = subtotalServicos + subtotalProdutos;
   const total = Math.max(0, subtotal - descontoNum);
 
   const nomePetShop = data?.nomePetShop ?? "Pet Shop";
+  const catalogo = data?.catalogoProdutos ?? [];
 
   function handlePrint(tipo: "cupom" | "recibo") {
     if (!selecionado) return;
     const pets = [...new Set(selecionado.appointments.map((a) => a.pet?.nome).filter(Boolean))].join(", ");
-    const itens = selecionado.appointments.map((a) => ({
+    const itensServicos = selecionado.appointments.map((a) => ({
       descricao: a.service?.nome ?? "Serviço",
       profissional: a.professional?.nome ?? "",
       valor: parseFloat(a.preco ?? "0"),
     }));
+    const itensProdutos = carrinho.map((i) => ({
+      descricao: `${i.nome}${i.qty > 1 ? ` (x${i.qty})` : ""}`,
+      profissional: "",
+      valor: i.preco * i.qty,
+    }));
+    const itens = [...itensServicos, ...itensProdutos];
     const opts = {
       nomePetShop,
       tutor: selecionado.tutor.nome,
@@ -209,7 +245,6 @@ function CaixaPage() {
 
       {/* ── Painel esquerdo: lista de tutores ────────────────────────── */}
       <div className="w-80 shrink-0 border-r border-border flex flex-col overflow-hidden bg-card">
-        {/* Header do painel */}
         <div className="p-3 border-b border-border space-y-2">
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => mudarDia(-1)}>
@@ -221,7 +256,7 @@ function CaixaPage() {
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => mudarDia(1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => { setDataAtual(new Date().toISOString().slice(0, 10)); setSelecionado(null); }}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => { setDataAtual(new Date().toISOString().slice(0, 10)); setSelecionado(null); setCarrinho([]); }}>
               Hoje
             </Button>
           </div>
@@ -231,7 +266,6 @@ function CaixaPage() {
           </div>
         </div>
 
-        {/* Lista de tutores */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {isLoading ? (
             <p className="text-xs text-muted-foreground p-2">Carregando...</p>
@@ -243,7 +277,7 @@ function CaixaPage() {
               return (
                 <button
                   key={g.tutor.id}
-                  onClick={() => { setSelecionado(g); setDesconto("0"); }}
+                  onClick={() => selecionarCliente(g)}
                   className={`w-full text-left rounded-lg p-3 transition-colors border ${
                     isActive
                       ? "bg-primary/10 border-primary/40 text-foreground"
@@ -263,12 +297,8 @@ function CaixaPage() {
                       </Badge>
                     )}
                   </div>
-                  {!g.pago && (
-                    <p className="text-xs font-medium text-primary mt-1">{formatCurrency(g.total)}</p>
-                  )}
-                  {g.pago && (
-                    <p className="text-xs text-success mt-1">{formatCurrency(g.valorPago)}</p>
-                  )}
+                  {!g.pago && <p className="text-xs font-medium text-primary mt-1">{formatCurrency(g.total)}</p>}
+                  {g.pago && <p className="text-xs text-success mt-1">{formatCurrency(g.valorPago)}</p>}
                 </button>
               );
             })
@@ -324,6 +354,59 @@ function CaixaPage() {
               </div>
             </div>
 
+            {/* Produtos — só mostra se não estiver pago */}
+            {!selecionado.pago && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                  <ShoppingCart className="h-3.5 w-3.5" /> Produtos
+                </p>
+
+                {/* Catálogo para selecionar */}
+                {catalogo.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {catalogo.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => adicionarProduto(p)}
+                        className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{p.nome}</p>
+                          <p className="text-xs text-primary font-semibold">{formatCurrency(p.preco)}</p>
+                        </div>
+                        <Plus className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Carrinho de produtos */}
+                {carrinho.length > 0 && (
+                  <div className="space-y-1 rounded-lg border border-border p-3">
+                    {carrinho.map((item) => (
+                      <div key={item.produtoId} className="flex items-center justify-between">
+                        <p className="text-sm">{item.nome}</p>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => removerProduto(item.produtoId)} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent">
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="text-sm font-medium w-4 text-center">{item.qty}</span>
+                          <button onClick={() => adicionarProduto({ id: item.produtoId, nome: item.nome, preco: String(item.preco) })} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent">
+                            <Plus className="h-3 w-3" />
+                          </button>
+                          <span className="text-sm font-medium w-20 text-right">{formatCurrency(item.preco * item.qty)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {catalogo.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Nenhum produto cadastrado. Cadastre em <strong>Produtos</strong> no menu.</p>
+                )}
+              </div>
+            )}
+
             {selecionado.pago ? (
               /* ── Estado: já pago ───────────────────────────────────── */
               <div className="space-y-4">
@@ -339,18 +422,26 @@ function CaixaPage() {
                     <FileText className="h-4 w-4" /> Recibo PDF
                   </Button>
                 </div>
-                <button
-                  onClick={() => setSelecionado(null)}
-                  className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
-                >
+                <button onClick={() => setSelecionado(null)} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
                   Próximo cliente →
                 </button>
               </div>
             ) : (
               /* ── Estado: aguardando pagamento ──────────────────────── */
               <div className="space-y-4 border-t border-border pt-4">
-                {/* Subtotal / desconto / total */}
                 <div className="space-y-2 text-sm">
+                  {subtotalProdutos > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Serviços</span>
+                      <span>{formatCurrency(subtotalServicos)}</span>
+                    </div>
+                  )}
+                  {subtotalProdutos > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Produtos</span>
+                      <span>{formatCurrency(subtotalProdutos)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
                     <span>{formatCurrency(subtotal)}</span>
@@ -372,7 +463,6 @@ function CaixaPage() {
                   <span className="text-2xl font-black">{formatCurrency(total)}</span>
                 </div>
 
-                {/* Forma de pagamento */}
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Forma de Pagamento</p>
                   <div className="grid grid-cols-4 gap-2">
@@ -393,7 +483,6 @@ function CaixaPage() {
                   </div>
                 </div>
 
-                {/* Botão fechar caixa */}
                 <Button
                   className="w-full h-12 text-base font-bold"
                   disabled={pagar.isPending}

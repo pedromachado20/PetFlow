@@ -20,6 +20,7 @@ import { Route as AppTutoresIndexImport } from './routes/_app/tutores/index'
 import { Route as AppServicosIndexImport } from './routes/_app/servicos/index'
 import { Route as AppRelatoriosIndexImport } from './routes/_app/relatorios/index'
 import { Route as AppProfissionaisIndexImport } from './routes/_app/profissionais/index'
+import { Route as AppProdutosIndexImport } from './routes/_app/produtos/index'
 import { Route as AppPlanosIndexImport } from './routes/_app/planos/index'
 import { Route as AppPetsIndexImport } from './routes/_app/pets/index'
 import { Route as AppFinanceiroIndexImport } from './routes/_app/financeiro/index'
@@ -80,6 +81,12 @@ const AppRelatoriosIndexRoute = AppRelatoriosIndexImport.update({
 const AppProfissionaisIndexRoute = AppProfissionaisIndexImport.update({
   id: '/profissionais/',
   path: '/profissionais/',
+  getParentRoute: () => AppRoute,
+} as any)
+
+const AppProdutosIndexRoute = AppProdutosIndexImport.update({
+  id: '/produtos/',
+  path: '/produtos/',
   getParentRoute: () => AppRoute,
 } as any)
 
@@ -213,6 +220,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlanosIndexImport
       parentRoute: typeof AppImport
     }
+    '/_app/produtos/': {
+      id: '/_app/produtos/'
+      path: '/produtos'
+      fullPath: '/produtos'
+      preLoaderRoute: typeof AppProdutosIndexImport
+      parentRoute: typeof AppImport
+    }
     '/_app/profissionais/': {
       id: '/_app/profissionais/'
       path: '/profissionais'
@@ -255,6 +269,7 @@ interface AppRouteChildren {
   AppFinanceiroIndexRoute: typeof AppFinanceiroIndexRoute
   AppPetsIndexRoute: typeof AppPetsIndexRoute
   AppPlanosIndexRoute: typeof AppPlanosIndexRoute
+  AppProdutosIndexRoute: typeof AppProdutosIndexRoute
   AppProfissionaisIndexRoute: typeof AppProfissionaisIndexRoute
   AppRelatoriosIndexRoute: typeof AppRelatoriosIndexRoute
   AppServicosIndexRoute: typeof AppServicosIndexRoute
@@ -270,6 +285,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppFinanceiroIndexRoute: AppFinanceiroIndexRoute,
   AppPetsIndexRoute: AppPetsIndexRoute,
   AppPlanosIndexRoute: AppPlanosIndexRoute,
+  AppProdutosIndexRoute: AppProdutosIndexRoute,
   AppProfissionaisIndexRoute: AppProfissionaisIndexRoute,
   AppRelatoriosIndexRoute: AppRelatoriosIndexRoute,
   AppServicosIndexRoute: AppServicosIndexRoute,
@@ -291,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/financeiro': typeof AppFinanceiroIndexRoute
   '/pets': typeof AppPetsIndexRoute
   '/planos': typeof AppPlanosIndexRoute
+  '/produtos': typeof AppProdutosIndexRoute
   '/profissionais': typeof AppProfissionaisIndexRoute
   '/relatorios': typeof AppRelatoriosIndexRoute
   '/servicos': typeof AppServicosIndexRoute
@@ -310,6 +327,7 @@ export interface FileRoutesByTo {
   '/financeiro': typeof AppFinanceiroIndexRoute
   '/pets': typeof AppPetsIndexRoute
   '/planos': typeof AppPlanosIndexRoute
+  '/produtos': typeof AppProdutosIndexRoute
   '/profissionais': typeof AppProfissionaisIndexRoute
   '/relatorios': typeof AppRelatoriosIndexRoute
   '/servicos': typeof AppServicosIndexRoute
@@ -330,6 +348,7 @@ export interface FileRoutesById {
   '/_app/financeiro/': typeof AppFinanceiroIndexRoute
   '/_app/pets/': typeof AppPetsIndexRoute
   '/_app/planos/': typeof AppPlanosIndexRoute
+  '/_app/produtos/': typeof AppProdutosIndexRoute
   '/_app/profissionais/': typeof AppProfissionaisIndexRoute
   '/_app/relatorios/': typeof AppRelatoriosIndexRoute
   '/_app/servicos/': typeof AppServicosIndexRoute
@@ -351,6 +370,7 @@ export interface FileRouteTypes {
     | '/financeiro'
     | '/pets'
     | '/planos'
+    | '/produtos'
     | '/profissionais'
     | '/relatorios'
     | '/servicos'
@@ -369,6 +389,7 @@ export interface FileRouteTypes {
     | '/financeiro'
     | '/pets'
     | '/planos'
+    | '/produtos'
     | '/profissionais'
     | '/relatorios'
     | '/servicos'
@@ -387,6 +408,7 @@ export interface FileRouteTypes {
     | '/_app/financeiro/'
     | '/_app/pets/'
     | '/_app/planos/'
+    | '/_app/produtos/'
     | '/_app/profissionais/'
     | '/_app/relatorios/'
     | '/_app/servicos/'
@@ -438,6 +460,7 @@ export const routeTree = rootRoute
         "/_app/financeiro/",
         "/_app/pets/",
         "/_app/planos/",
+        "/_app/produtos/",
         "/_app/profissionais/",
         "/_app/relatorios/",
         "/_app/servicos/",
@@ -480,6 +503,10 @@ export const routeTree = rootRoute
     },
     "/_app/planos/": {
       "filePath": "_app/planos/index.tsx",
+      "parent": "/_app"
+    },
+    "/_app/produtos/": {
+      "filePath": "_app/produtos/index.tsx",
       "parent": "/_app"
     },
     "/_app/profissionais/": {

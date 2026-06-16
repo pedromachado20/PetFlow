@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarDays, Users, PawPrint, Scissors,
   UserCheck, DollarSign, BarChart3, Settings, ChevronLeft,
-  ChevronRight, CreditCard, Receipt,
+  ChevronRight, CreditCard, Receipt, ShoppingBag,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 
@@ -19,8 +19,9 @@ const navItems = [
   {
     label: "Cadastros",
     items: [
-      { icon: Users,    label: "Tutores", to: "/tutores" },
-      { icon: PawPrint, label: "Pets",    to: "/pets" },
+      { icon: Users,       label: "Tutores",  to: "/tutores" },
+      { icon: PawPrint,    label: "Pets",     to: "/pets" },
+      { icon: ShoppingBag, label: "Produtos", to: "/produtos" },
     ],
   },
   {

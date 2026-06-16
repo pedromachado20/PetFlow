@@ -9,6 +9,7 @@ import {
   vacinas, prontuarios,
   plans, assinaturas,
   transacoes,
+  produtos,
 } from "./schema";
 
 export const tenantsRelations = relations(tenants, ({ many }) => ({
@@ -23,6 +24,7 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   plans: many(plans),
   assinaturas: many(assinaturas),
   transacoes: many(transacoes),
+  produtos: many(produtos),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -107,4 +109,8 @@ export const assinaturasRelations = relations(assinaturas, ({ one }) => ({
 
 export const transacoesRelations = relations(transacoes, ({ one }) => ({
   tenant: one(tenants, { fields: [transacoes.tenantId], references: [tenants.id] }),
+}));
+
+export const produtosRelations = relations(produtos, ({ one }) => ({
+  tenant: one(tenants, { fields: [produtos.tenantId], references: [tenants.id] }),
 }));

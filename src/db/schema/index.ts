@@ -8,3 +8,4 @@ export * from "./appointments";
 export * from "./medical";
 export * from "./plans";
 export * from "./financial";
+export * from "./products";

@@ -12,7 +12,7 @@ import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
 import { Badge } from "~/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { Wifi } from "lucide-react";
+import { Wifi, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 
 const getConfig = createServerFn({ method: "GET" }).handler(async () => {
@@ -125,6 +125,96 @@ const schemaDados = z.object({
   estado: z.string().optional(),
   cnpj: z.string().optional(),
 });
+
+/* ── Guia de integração WhatsApp ───────────────────────────────────── */
+
+function GuiaZApi() {
+  return (
+    <div className="space-y-2 text-sm">
+      <p className="text-muted-foreground text-xs mb-3">
+        O Z-API é um serviço pago que conecta o WhatsApp do seu pet shop ao sistema. Siga os passos abaixo:
+      </p>
+      {[
+        { n: 1, t: "Crie sua conta no Z-API", d: 'Acesse o site app.z-api.io no navegador. Clique em "Criar conta grátis" e preencha seus dados.' },
+        { n: 2, t: "Crie uma instância", d: 'Após entrar, clique em "Nova Instância". Dê um nome (ex: "PetFlow") e confirme.' },
+        { n: 3, t: "Conecte o WhatsApp", d: 'Um QR Code vai aparecer na tela. Abra o WhatsApp Business no celular do pet shop → toque nos três pontinhos → "Dispositivos conectados" → "Conectar dispositivo" → aponte a câmera para o QR Code.' },
+        { n: 4, t: "Copie o ID e o Token da instância", d: 'Na tela da instância, copie o campo "Instance ID" e o campo "Token". Cole nos campos "ID da Instância" e "Token" aqui no PetFlow.' },
+        { n: 5, t: "Copie o Security Token", d: 'No menu lateral do Z-API, vá em "Segurança". Copie o "Security Token" e cole no campo "Client Token" aqui.' },
+        { n: 6, t: "Salve e teste", d: 'Clique em "Salvar WhatsApp". Depois, digite um número de telefone no campo de teste (com DDD, ex: 11999999999) e clique em "Testar Conexão". Você deve receber uma mensagem.' },
+      ].map(({ n, t, d }) => (
+        <div key={n} className="flex gap-3">
+          <span className="bg-primary text-primary-foreground rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{n}</span>
+          <div>
+            <p className="font-medium text-foreground">{t}</p>
+            <p className="text-muted-foreground text-xs mt-0.5">{d}</p>
+          </div>
+        </div>
+      ))}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+        <p className="text-xs text-amber-800">
+          <strong>Atenção:</strong> O WhatsApp do celular precisa continuar conectado à internet para que as mensagens funcionem. Se desconectar, repita o passo 3.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function GuiaEvolution() {
+  return (
+    <div className="space-y-2 text-sm">
+      <p className="text-muted-foreground text-xs mb-3">
+        A Evolution API é uma solução open-source. Você pode hospedar você mesmo ou contratar um serviço pronto. Siga os passos:
+      </p>
+      {[
+        { n: 1, t: "Tenha a Evolution API instalada", d: "Se ainda não tem, contrate um serviço hospedado de Evolution API ou peça ao seu técnico para instalar. Você vai receber a URL de acesso e a API Key." },
+        { n: 2, t: "Acesse o painel da Evolution API", d: 'Abra a URL que você recebeu no navegador e entre com a API Key.' },
+        { n: 3, t: "Crie uma instância", d: 'No painel, clique em "Create Instance". Dê um nome simples (ex: "petflow"). Anote o nome exato — ele é o "Nome da Instância".' },
+        { n: 4, t: "Conecte o WhatsApp", d: 'Clique na instância criada e veja o QR Code. Abra o WhatsApp Business no celular → "Dispositivos conectados" → "Conectar dispositivo" → aponte para o QR Code.' },
+        { n: 5, t: "Preencha os campos aqui", d: 'Cole a URL da Evolution API, a API Key e o nome da instância nos campos acima.' },
+        { n: 6, t: "Salve e teste", d: 'Clique em "Salvar WhatsApp". Digite um número para testar e clique em "Testar Conexão".' },
+      ].map(({ n, t, d }) => (
+        <div key={n} className="flex gap-3">
+          <span className="bg-primary text-primary-foreground rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{n}</span>
+          <div>
+            <p className="font-medium text-foreground">{t}</p>
+            <p className="text-muted-foreground text-xs mt-0.5">{d}</p>
+          </div>
+        </div>
+      ))}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+        <p className="text-xs text-blue-800">
+          <strong>Dica:</strong> Se não souber instalar a Evolution API, peça ajuda a um técnico de informática. Existem planos hospedados por volta de R$ 30 a R$ 80/mês que já vêm prontos para usar.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function GuiaWhatsApp({ provider }: { provider: string }) {
+  const [aberto, setAberto] = useState(false);
+
+  if (provider === "nenhum") return null;
+
+  const titulo = provider === "z-api" ? "Como configurar o Z-API" : "Como configurar a Evolution API";
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-primary"
+      >
+        <span>📖 {titulo} — passo a passo</span>
+        {aberto ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+      </button>
+      {aberto && (
+        <div className="px-4 pb-4 border-t border-primary/10 pt-3">
+          {provider === "z-api" ? <GuiaZApi /> : <GuiaEvolution />}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/_app/configuracoes/")({
   component: ConfiguracoesPage,
@@ -300,6 +390,8 @@ function ConfiguracoesPage() {
               </SelectContent>
             </Select>
           </div>
+
+          <GuiaWhatsApp provider={provider} />
 
           {provider === "z-api" && (
             <>

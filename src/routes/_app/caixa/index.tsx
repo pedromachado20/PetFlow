@@ -2,12 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Search, CheckCircle2, Printer, FileText, Plus, Minus, ShoppingCart } from "lucide-react";
+import {
+  ChevronLeft, ChevronRight, Search, CheckCircle2, Printer, FileText,
+  Plus, Minus, ShoppingCart, Zap, X, Check,
+} from "lucide-react";
 import { z } from "zod";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Badge } from "~/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Label } from "~/components/ui/label";
 import { toast } from "sonner";
 import { formatCurrency } from "~/lib/utils";
 import { printCupom, printRecibo } from "~/lib/pdf";
@@ -109,10 +115,102 @@ const registrarPagamento = createServerFn({ method: "POST" })
     });
   });
 
+const getDadosAvulso = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireTenant } = await import("~/server/context");
+  const { db } = await import("~/db");
+  const { tenantId } = await requireTenant();
+  const { eq, and } = await import("drizzle-orm");
+  const { tutores, pets, professionals, services } = await import("~/db/schema");
+
+  const [listaTutores, listaProfissionais, listaServicos] = await Promise.all([
+    db.query.tutores.findMany({
+      where: eq(tutores.tenantId, tenantId),
+      with: { pets: { where: eq(pets.ativo, true) } },
+      orderBy: (t, { asc }) => [asc(t.nome)],
+    }),
+    db.query.professionals.findMany({
+      where: and(eq(professionals.tenantId, tenantId), eq(professionals.ativo, true)),
+      orderBy: (p, { asc }) => [asc(p.nome)],
+    }),
+    db.query.services.findMany({
+      where: and(eq(services.tenantId, tenantId), eq(services.ativo, true)),
+      orderBy: (s, { asc }) => [asc(s.nome)],
+    }),
+  ]);
+
+  return { tutores: listaTutores, profissionais: listaProfissionais, servicos: listaServicos };
+});
+
+const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
+  .validator(z.object({
+    tutorId: z.string().optional(),
+    tutorNome: z.string(),
+    petId: z.string().optional(),
+    profissionalId: z.string().optional(),
+    servicos: z.array(z.object({ serviceId: z.string(), nome: z.string(), preco: z.string() })),
+    produtos: z.array(z.object({ produtoId: z.string(), nome: z.string(), preco: z.number(), qty: z.number() })),
+    desconto: z.number(),
+    formaPagamento: z.string(),
+    data: z.string(),
+    total: z.number(),
+  }))
+  .handler(async ({ data }) => {
+    const { requireTenant } = await import("~/server/context");
+    const { db } = await import("~/db");
+    const { tenantId } = await requireTenant();
+    const { appointments, transacoes } = await import("~/db/schema");
+
+    const horaAtual = new Date().toTimeString().slice(0, 5);
+
+    // Se cliente cadastrado com pet e profissional: cria appointments (gera histórico)
+    if (data.tutorId && data.petId && data.profissionalId && data.servicos.length > 0) {
+      await Promise.all(
+        data.servicos.map((s) =>
+          db.insert(appointments).values({
+            id: crypto.randomUUID(),
+            tenantId,
+            tutorId: data.tutorId!,
+            petId: data.petId!,
+            professionalId: data.profissionalId!,
+            serviceId: s.serviceId,
+            data: data.data,
+            horaInicio: horaAtual,
+            horaFim: horaAtual,
+            preco: s.preco,
+            status: "concluido",
+          })
+        )
+      );
+    }
+
+    const descServicos = data.servicos.map((s) => s.nome).join(", ");
+    const descProdutos = data.produtos.map((p) => `${p.nome}${p.qty > 1 ? ` x${p.qty}` : ""}`).join(", ");
+    const descricao = [
+      `Atendimento avulso · ${data.tutorNome}`,
+      descServicos,
+      descProdutos,
+    ].filter(Boolean).join(" | ");
+
+    await db.insert(transacoes).values({
+      id: crypto.randomUUID(),
+      tenantId,
+      tipo: "receita",
+      categoria: data.formaPagamento,
+      descricao,
+      valor: data.total.toFixed(2),
+      status: "pago",
+      data: data.data,
+      pago: true,
+      referencia: `avulso-${crypto.randomUUID()}`,
+    });
+  });
+
 /* ── types ────────────────────────────────────────────────────────────── */
 
 type Grupo = Awaited<ReturnType<typeof getCaixa>>["grupos"][number];
 type ProdutoItem = { produtoId: string; nome: string; preco: number; qty: number };
+type DadosAvulso = Awaited<ReturnType<typeof getDadosAvulso>>;
+type ServicoSelecionado = { serviceId: string; nome: string; preco: string };
 
 const formas = [
   { key: "Dinheiro", icon: "💵" },
@@ -120,6 +218,306 @@ const formas = [
   { key: "Débito",   icon: "💳" },
   { key: "Crédito",  icon: "💳" },
 ];
+
+/* ── Atendimento Avulso Dialog ────────────────────────────────────────── */
+
+function AtendimentoAvulsoDialog({
+  open, onClose, dados, catalogoProdutos, nomePetShop, dataAtual, onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  dados: DadosAvulso | undefined;
+  catalogoProdutos: Awaited<ReturnType<typeof getCaixa>>["catalogoProdutos"];
+  nomePetShop: string;
+  dataAtual: string;
+  onSuccess: () => void;
+}) {
+  const [busca, setBusca] = useState("");
+  const [semCadastro, setSemCadastro] = useState(false);
+  const [nomeAvulso, setNomeAvulso] = useState("");
+  const [tutorSel, setTutorSel] = useState<DadosAvulso["tutores"][0] | null>(null);
+  const [petSel, setPetSel] = useState<string>("");
+  const [profSel, setProfSel] = useState<string>("");
+  const [servicosSel, setServicosSel] = useState<ServicoSelecionado[]>([]);
+  const [carrinho, setCarrinho] = useState<ProdutoItem[]>([]);
+  const [desconto, setDesconto] = useState("0");
+  const [formaPag, setFormaPag] = useState("Dinheiro");
+
+  function resetar() {
+    setBusca(""); setSemCadastro(false); setNomeAvulso("");
+    setTutorSel(null); setPetSel(""); setProfSel("");
+    setServicosSel([]); setCarrinho([]); setDesconto("0"); setFormaPag("Dinheiro");
+  }
+
+  function fechar() { resetar(); onClose(); }
+
+  function toggleServico(s: DadosAvulso["servicos"][0]) {
+    setServicosSel((prev) => {
+      const existe = prev.find((x) => x.serviceId === s.id);
+      if (existe) return prev.filter((x) => x.serviceId !== s.id);
+      return [...prev, { serviceId: s.id, nome: s.nome, preco: s.preco ?? "0" }];
+    });
+  }
+
+  function adicionarProduto(p: { id: string; nome: string; preco: string }) {
+    setCarrinho((prev) => {
+      const ex = prev.find((i) => i.produtoId === p.id);
+      if (ex) return prev.map((i) => i.produtoId === p.id ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, { produtoId: p.id, nome: p.nome, preco: parseFloat(p.preco), qty: 1 }];
+    });
+  }
+
+  function removerProduto(produtoId: string) {
+    setCarrinho((prev) => {
+      const ex = prev.find((i) => i.produtoId === produtoId);
+      if (!ex) return prev;
+      if (ex.qty <= 1) return prev.filter((i) => i.produtoId !== produtoId);
+      return prev.map((i) => i.produtoId === produtoId ? { ...i, qty: i.qty - 1 } : i);
+    });
+  }
+
+  const tutoresFiltrados = (dados?.tutores ?? []).filter((t) =>
+    busca.length >= 2 && t.nome.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  const descontoNum = parseFloat(desconto || "0") || 0;
+  const subServicos = servicosSel.reduce((s, i) => s + parseFloat(i.preco), 0);
+  const subProdutos = carrinho.reduce((s, i) => s + i.preco * i.qty, 0);
+  const total = Math.max(0, subServicos + subProdutos - descontoNum);
+
+  const tutorNome = semCadastro ? (nomeAvulso || "Cliente sem cadastro") : (tutorSel?.nome ?? "");
+  const podeSalvar = (semCadastro || tutorSel) && (servicosSel.length > 0 || carrinho.length > 0);
+
+  const registrar = useMutation({
+    mutationFn: () => registrarAtendimentoAvulso({
+      data: {
+        tutorId: tutorSel?.id,
+        tutorNome,
+        petId: petSel || undefined,
+        profissionalId: profSel || undefined,
+        servicos: servicosSel,
+        produtos: carrinho,
+        desconto: descontoNum,
+        formaPagamento: formaPag,
+        data: dataAtual,
+        total,
+      },
+    }),
+    onSuccess: () => {
+      // imprime cupom
+      const itensServicos = servicosSel.map((s) => ({ descricao: s.nome, profissional: profSel ? (dados?.profissionais.find((p) => p.id === profSel)?.nome ?? "") : "", valor: parseFloat(s.preco) }));
+      const itensProdutos = carrinho.map((i) => ({ descricao: `${i.nome}${i.qty > 1 ? ` (x${i.qty})` : ""}`, valor: i.preco * i.qty }));
+      printCupom({ nomePetShop, tutor: tutorNome, pets: tutorSel ? (dados?.tutores.find((t) => t.id === tutorSel.id)?.pets.find((p) => p.id === petSel)?.nome ?? "") : "", data: dataAtual, itensServicos, itensProdutos, desconto: descontoNum, total, formaPagamento: formaPag });
+      toast.success("Atendimento registrado!");
+      fechar();
+      onSuccess();
+    },
+    onError: () => toast.error("Erro ao registrar atendimento"),
+  });
+
+  const petDoTutor = tutorSel?.pets ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && fechar()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary" /> Atendimento Avulso
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5 pb-2">
+
+          {/* ── Cliente ──────────────────────────────────────────────── */}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Cliente</Label>
+
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={semCadastro} onChange={(e) => { setSemCadastro(e.target.checked); setTutorSel(null); setBusca(""); }} />
+                Cliente sem cadastro
+              </label>
+            </div>
+
+            {semCadastro ? (
+              <Input placeholder="Nome (opcional)" value={nomeAvulso} onChange={(e) => setNomeAvulso(e.target.value)} />
+            ) : (
+              <div className="space-y-1">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    className="pl-8"
+                    placeholder="Buscar tutor pelo nome..."
+                    value={busca}
+                    onChange={(e) => { setBusca(e.target.value); setTutorSel(null); setPetSel(""); }}
+                  />
+                </div>
+                {tutorSel && (
+                  <div className="flex items-center justify-between rounded-lg bg-primary/10 border border-primary/30 px-3 py-2">
+                    <span className="text-sm font-medium text-primary">{tutorSel.nome}</span>
+                    <button onClick={() => { setTutorSel(null); setBusca(""); setPetSel(""); }}>
+                      <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </button>
+                  </div>
+                )}
+                {!tutorSel && tutoresFiltrados.length > 0 && (
+                  <div className="border border-border rounded-lg divide-y divide-border max-h-36 overflow-y-auto">
+                    {tutoresFiltrados.map((t) => (
+                      <button key={t.id} onClick={() => { setTutorSel(t); setBusca(""); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent/50 flex items-center justify-between">
+                        <span>{t.nome}</span>
+                        <span className="text-xs text-muted-foreground">{t.pets.length} pet(s)</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {busca.length >= 2 && tutoresFiltrados.length === 0 && !tutorSel && (
+                  <p className="text-xs text-muted-foreground px-1">Nenhum tutor encontrado.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Pet (só se tutor selecionado) ────────────────────────── */}
+          {tutorSel && petDoTutor.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pet</Label>
+              <div className="flex flex-wrap gap-2">
+                {petDoTutor.map((p) => (
+                  <button key={p.id} onClick={() => setPetSel(petSel === p.id ? "" : p.id)}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${petSel === p.id ? "border-primary bg-primary/10 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/40"}`}>
+                    {petSel === p.id && <Check className="h-3 w-3" />}
+                    {p.nome}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Profissional (só se tutor + pet selecionados) ─────────── */}
+          {tutorSel && petSel && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Profissional <span className="text-muted-foreground normal-case font-normal">(para registrar no histórico)</span>
+              </Label>
+              <Select value={profSel} onValueChange={setProfSel}>
+                <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
+                <SelectContent>
+                  {(dados?.profissionais ?? []).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* ── Serviços ─────────────────────────────────────────────── */}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Serviços Realizados</Label>
+            {(dados?.servicos ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum serviço cadastrado.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {(dados?.servicos ?? []).map((s) => {
+                  const sel = servicosSel.some((x) => x.serviceId === s.id);
+                  return (
+                    <button key={s.id} onClick={() => toggleServico(s)}
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors ${sel ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40 hover:bg-primary/5"}`}>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium truncate">{s.nome}</p>
+                        <p className="text-xs font-semibold">{formatCurrency(s.preco)}</p>
+                      </div>
+                      {sel ? <Check className="h-4 w-4 shrink-0 ml-1" /> : <Plus className="h-4 w-4 shrink-0 ml-1 text-muted-foreground" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Produtos ─────────────────────────────────────────────── */}
+          {catalogoProdutos.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <ShoppingCart className="h-3.5 w-3.5" /> Produtos
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                {catalogoProdutos.map((p) => (
+                  <button key={p.id} onClick={() => adicionarProduto(p)}
+                    className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">{p.nome}</p>
+                      <p className="text-xs text-primary font-semibold">{formatCurrency(p.preco)}</p>
+                    </div>
+                    <Plus className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+                  </button>
+                ))}
+              </div>
+              {carrinho.length > 0 && (
+                <div className="space-y-1 rounded-lg border border-border p-3 mt-1">
+                  {carrinho.map((item) => (
+                    <div key={item.produtoId} className="flex items-center justify-between">
+                      <p className="text-sm">{item.nome}</p>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => removerProduto(item.produtoId)} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent"><Minus className="h-3 w-3" /></button>
+                        <span className="text-sm font-medium w-4 text-center">{item.qty}</span>
+                        <button onClick={() => adicionarProduto({ id: item.produtoId, nome: item.nome, preco: String(item.preco) })} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent"><Plus className="h-3 w-3" /></button>
+                        <span className="text-sm font-medium w-20 text-right">{formatCurrency(item.preco * item.qty)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Pagamento ────────────────────────────────────────────── */}
+          <div className="space-y-3 border-t border-border pt-4">
+            <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pagamento</Label>
+
+            <div className="space-y-1.5 text-sm">
+              {subProdutos > 0 && <>
+                <div className="flex justify-between"><span className="text-muted-foreground">Serviços</span><span>{formatCurrency(subServicos)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Produtos</span><span>{formatCurrency(subProdutos)}</span></div>
+              </>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(subServicos + subProdutos)}</span></div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Desconto (R$)</span>
+                <input type="number" min="0" step="0.01" value={desconto} onChange={(e) => setDesconto(e.target.value)}
+                  className="w-24 text-right border border-border rounded px-2 py-1 text-sm bg-background" />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border pt-2">
+              <span className="font-bold">TOTAL</span>
+              <span className="text-2xl font-black">{formatCurrency(total)}</span>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              {formas.map((f) => (
+                <button key={f.key} onClick={() => setFormaPag(f.key)}
+                  className={`flex flex-col items-center gap-1 rounded-lg border p-2.5 transition-colors ${formaPag === f.key ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
+                  <span className="text-lg">{f.icon}</span>
+                  <span className="text-xs font-medium">{f.key}</span>
+                </button>
+              ))}
+            </div>
+
+            <Button className="w-full h-11 font-bold" disabled={!podeSalvar || registrar.isPending} onClick={() => registrar.mutate()}>
+              {registrar.isPending ? "Registrando..." : `Registrar Atendimento — ${formatCurrency(total)}`}
+            </Button>
+
+            {!podeSalvar && (
+              <p className="text-xs text-muted-foreground text-center">
+                {!tutorSel && !semCadastro ? "Selecione um cliente ou marque 'sem cadastro'" : "Selecione ao menos um serviço ou produto"}
+              </p>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 /* ── route ────────────────────────────────────────────────────────────── */
 
@@ -135,10 +533,18 @@ function CaixaPage() {
   const [desconto, setDesconto] = useState("0");
   const [formaPagamento, setFormaPagamento] = useState("Dinheiro");
   const [carrinho, setCarrinho] = useState<ProdutoItem[]>([]);
+  const [avulsoOpen, setAvulsoOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["caixa", dataAtual],
     queryFn: () => getCaixa({ data: { data: dataAtual } }),
+  });
+
+  const { data: dadosAvulso } = useQuery({
+    queryKey: ["dadosAvulso"],
+    queryFn: () => getDadosAvulso(),
+    enabled: avulsoOpen,
+    staleTime: 60_000,
   });
 
   const pagar = useMutation({
@@ -161,7 +567,6 @@ function CaixaPage() {
         const updated = fresh.grupos.find((g) => g.tutor.id === tutorId);
         if (updated) setSelecionado(updated);
       }
-      // carrinho mantido para impressão imediata após pagamento
       toast.success("Pagamento registrado!");
     },
     onError: (e: any) => toast.error(e.message ?? "Erro ao registrar pagamento"),
@@ -242,7 +647,7 @@ function CaixaPage() {
   return (
     <div className="-m-6 flex overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
 
-      {/* ── Painel esquerdo: lista de tutores ────────────────────────── */}
+      {/* ── Painel esquerdo ────────────────────────────────────────── */}
       <div className="w-80 shrink-0 border-r border-border flex flex-col overflow-hidden bg-card">
         <div className="p-3 border-b border-border space-y-2">
           <div className="flex items-center gap-1">
@@ -263,26 +668,22 @@ function CaixaPage() {
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input className="pl-8 h-8 text-xs" placeholder="Nome ou telefone..." value={busca} onChange={(e) => setBusca(e.target.value)} />
           </div>
+          <Button size="sm" className="w-full h-8 gap-1.5 text-xs" variant="outline" onClick={() => setAvulsoOpen(true)}>
+            <Zap className="h-3.5 w-3.5 text-primary" /> Atendimento Avulso
+          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {isLoading ? (
             <p className="text-xs text-muted-foreground p-2">Carregando...</p>
           ) : !grupos.length ? (
-            <p className="text-xs text-muted-foreground p-2 text-center">Sem atendimentos neste dia</p>
+            <p className="text-xs text-muted-foreground p-2 text-center">Sem atendimentos agendados neste dia</p>
           ) : (
             grupos.map((g) => {
               const isActive = selecionado?.tutor.id === g.tutor.id;
               return (
-                <button
-                  key={g.tutor.id}
-                  onClick={() => selecionarCliente(g)}
-                  className={`w-full text-left rounded-lg p-3 transition-colors border ${
-                    isActive
-                      ? "bg-primary/10 border-primary/40 text-foreground"
-                      : "bg-transparent border-transparent hover:bg-accent/50 hover:border-border"
-                  }`}
-                >
+                <button key={g.tutor.id} onClick={() => selecionarCliente(g)}
+                  className={`w-full text-left rounded-lg p-3 transition-colors border ${isActive ? "bg-primary/10 border-primary/40 text-foreground" : "bg-transparent border-transparent hover:bg-accent/50 hover:border-border"}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate">{g.tutor.nome}</p>
@@ -291,9 +692,7 @@ function CaixaPage() {
                     {g.pago ? (
                       <Badge variant="success" className="text-[10px] px-1.5 py-0 shrink-0">Pago</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-                        {g.appointments.length} serv.
-                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{g.appointments.length} serv.</Badge>
                     )}
                   </div>
                   {!g.pago && <p className="text-xs font-medium text-primary mt-1">{formatCurrency(g.total)}</p>}
@@ -309,15 +708,14 @@ function CaixaPage() {
         </div>
       </div>
 
-      {/* ── Painel direito: detalhes + pagamento ─────────────────────── */}
+      {/* ── Painel direito ─────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-6">
         {!selecionado ? (
           <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground text-sm">Selecione um cliente para ver os detalhes</p>
+            <p className="text-muted-foreground text-sm">Selecione um cliente agendado ou use <strong>Atendimento Avulso</strong></p>
           </div>
         ) : (
           <div className="max-w-xl space-y-6">
-            {/* Cabeçalho */}
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-xl font-bold">{selecionado.tutor.nome}</h2>
@@ -330,7 +728,6 @@ function CaixaPage() {
               )}
             </div>
 
-            {/* Serviços realizados */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Serviços Realizados</p>
               <div className="space-y-2">
@@ -338,14 +735,10 @@ function CaixaPage() {
                   <div key={a.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <div>
                       <p className="text-sm font-medium">{a.service?.nome ?? "-"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.pet?.nome} · {a.professional?.nome} · {a.horaInicio}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{a.pet?.nome} · {a.professional?.nome} · {a.horaInicio}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant={a.status === "concluido" ? "success" : "secondary"} className="text-xs">
-                        {a.status.replace("_", " ")}
-                      </Badge>
+                      <Badge variant={a.status === "concluido" ? "success" : "secondary"} className="text-xs">{a.status.replace("_", " ")}</Badge>
                       <span className="text-sm font-medium w-20 text-right">{formatCurrency(a.preco)}</span>
                     </div>
                   </div>
@@ -353,22 +746,16 @@ function CaixaPage() {
               </div>
             </div>
 
-            {/* Produtos — só mostra se não estiver pago */}
             {!selecionado.pago && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
                   <ShoppingCart className="h-3.5 w-3.5" /> Produtos
                 </p>
-
-                {/* Catálogo para selecionar */}
                 {catalogo.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     {catalogo.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => adicionarProduto(p)}
-                        className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                      >
+                      <button key={p.id} onClick={() => adicionarProduto(p)}
+                        className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors">
                         <div className="min-w-0">
                           <p className="text-xs font-medium truncate">{p.nome}</p>
                           <p className="text-xs text-primary font-semibold">{formatCurrency(p.preco)}</p>
@@ -378,28 +765,21 @@ function CaixaPage() {
                     ))}
                   </div>
                 )}
-
-                {/* Carrinho de produtos */}
                 {carrinho.length > 0 && (
                   <div className="space-y-1 rounded-lg border border-border p-3">
                     {carrinho.map((item) => (
                       <div key={item.produtoId} className="flex items-center justify-between">
                         <p className="text-sm">{item.nome}</p>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => removerProduto(item.produtoId)} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent">
-                            <Minus className="h-3 w-3" />
-                          </button>
+                          <button onClick={() => removerProduto(item.produtoId)} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent"><Minus className="h-3 w-3" /></button>
                           <span className="text-sm font-medium w-4 text-center">{item.qty}</span>
-                          <button onClick={() => adicionarProduto({ id: item.produtoId, nome: item.nome, preco: String(item.preco) })} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent">
-                            <Plus className="h-3 w-3" />
-                          </button>
+                          <button onClick={() => adicionarProduto({ id: item.produtoId, nome: item.nome, preco: String(item.preco) })} className="h-6 w-6 flex items-center justify-center rounded border border-border hover:bg-accent"><Plus className="h-3 w-3" /></button>
                           <span className="text-sm font-medium w-20 text-right">{formatCurrency(item.preco * item.qty)}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-
                 {catalogo.length === 0 && (
                   <p className="text-xs text-muted-foreground">Nenhum produto cadastrado. Cadastre em <strong>Produtos</strong> no menu.</p>
                 )}
@@ -407,86 +787,51 @@ function CaixaPage() {
             )}
 
             {selecionado.pago ? (
-              /* ── Estado: já pago ───────────────────────────────────── */
               <div className="space-y-4">
                 <div className="flex items-center justify-between border-t border-border pt-4">
                   <span className="text-sm text-muted-foreground">Total pago ({selecionado.formaPagamento})</span>
                   <span className="text-lg font-bold text-success">{formatCurrency(selecionado.valorPago)}</span>
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1" onClick={() => handlePrint("cupom")}>
-                    <Printer className="h-4 w-4" /> Cupom térmico
-                  </Button>
-                  <Button variant="outline" className="flex-1" onClick={() => handlePrint("recibo")}>
-                    <FileText className="h-4 w-4" /> Recibo PDF
-                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => handlePrint("cupom")}><Printer className="h-4 w-4" /> Cupom térmico</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => handlePrint("recibo")}><FileText className="h-4 w-4" /> Recibo PDF</Button>
                 </div>
                 <button onClick={() => { setSelecionado(null); setCarrinho([]); }} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
                   Próximo cliente →
                 </button>
               </div>
             ) : (
-              /* ── Estado: aguardando pagamento ──────────────────────── */
               <div className="space-y-4 border-t border-border pt-4">
                 <div className="space-y-2 text-sm">
-                  {subtotalProdutos > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Serviços</span>
-                      <span>{formatCurrency(subtotalServicos)}</span>
-                    </div>
-                  )}
-                  {subtotalProdutos > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Produtos</span>
-                      <span>{formatCurrency(subtotalProdutos)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span>{formatCurrency(subtotal)}</span>
-                  </div>
+                  {subtotalProdutos > 0 && <>
+                    <div className="flex items-center justify-between"><span className="text-muted-foreground">Serviços</span><span>{formatCurrency(subtotalServicos)}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-muted-foreground">Produtos</span><span>{formatCurrency(subtotalProdutos)}</span></div>
+                  </>}
+                  <div className="flex items-center justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Desconto (R$)</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={desconto}
-                      onChange={(e) => setDesconto(e.target.value)}
-                      className="w-24 text-right border border-border rounded px-2 py-1 text-sm bg-background"
-                    />
+                    <input type="number" min="0" step="0.01" value={desconto} onChange={(e) => setDesconto(e.target.value)}
+                      className="w-24 text-right border border-border rounded px-2 py-1 text-sm bg-background" />
                   </div>
                 </div>
                 <div className="flex items-center justify-between border-t border-border pt-3">
                   <span className="text-base font-bold">TOTAL</span>
                   <span className="text-2xl font-black">{formatCurrency(total)}</span>
                 </div>
-
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Forma de Pagamento</p>
                   <div className="grid grid-cols-4 gap-2">
                     {formas.map((f) => (
-                      <button
-                        key={f.key}
-                        onClick={() => setFormaPagamento(f.key)}
-                        className={`flex flex-col items-center gap-1 rounded-lg border p-3 transition-colors ${
-                          formaPagamento === f.key
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/40"
-                        }`}
-                      >
+                      <button key={f.key} onClick={() => setFormaPagamento(f.key)}
+                        className={`flex flex-col items-center gap-1 rounded-lg border p-3 transition-colors ${formaPagamento === f.key ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
                         <span className="text-xl">{f.icon}</span>
                         <span className="text-xs font-medium">{f.key}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-
-                <Button
-                  className="w-full h-12 text-base font-bold"
-                  disabled={pagar.isPending}
-                  onClick={() => pagar.mutate({ tutorId: selecionado.tutor.id, valor: total, desconto: descontoNum })}
-                >
+                <Button className="w-full h-12 text-base font-bold" disabled={pagar.isPending}
+                  onClick={() => pagar.mutate({ tutorId: selecionado.tutor.id, valor: total, desconto: descontoNum })}>
                   {pagar.isPending ? "Registrando..." : `Fechar Caixa — ${formatCurrency(total)}`}
                 </Button>
               </div>
@@ -494,6 +839,17 @@ function CaixaPage() {
           </div>
         )}
       </div>
+
+      {/* ── Dialog Atendimento Avulso ──────────────────────────────── */}
+      <AtendimentoAvulsoDialog
+        open={avulsoOpen}
+        onClose={() => setAvulsoOpen(false)}
+        dados={dadosAvulso}
+        catalogoProdutos={catalogo}
+        nomePetShop={nomePetShop}
+        dataAtual={dataAtual}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ["caixa", dataAtual] })}
+      />
     </div>
   );
 }

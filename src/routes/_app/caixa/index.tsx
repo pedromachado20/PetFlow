@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   ChevronLeft, ChevronRight, Search, CheckCircle2, Printer, FileText,
-  Plus, Minus, ShoppingCart, Zap, X, Check,
+  Plus, Minus, ShoppingCart, Zap, X, Check, Trash2, ClipboardList,
 } from "lucide-react";
 import { z } from "zod";
 import { Card, CardContent } from "~/components/ui/card";
@@ -143,34 +143,62 @@ const getDadosAvulso = createServerFn({ method: "GET" }).handler(async () => {
 
 const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
   .validator(z.object({
+    // cliente existente ou novo
     tutorId: z.string().optional(),
-    tutorNome: z.string(),
+    novoNomeTutor: z.string().optional(),
+    nomePet: z.string().optional(),
     petId: z.string().optional(),
     profissionalId: z.string().optional(),
+    // serviços do catálogo
     servicos: z.array(z.object({ serviceId: z.string(), nome: z.string(), preco: z.string() })),
+    // itens extras (procedimentos livres)
+    itensExtras: z.array(z.object({ descricao: z.string(), valor: z.string() })),
+    // produtos
     produtos: z.array(z.object({ produtoId: z.string(), nome: z.string(), preco: z.number(), qty: z.number() })),
+    // laudo para prontuário
+    laudo: z.string().optional(),
+    // pagamento
     desconto: z.number(),
     formaPagamento: z.string(),
     data: z.string(),
     total: z.number(),
+    tutorNome: z.string(),
   }))
   .handler(async ({ data }) => {
     const { requireTenant } = await import("~/server/context");
     const { db } = await import("~/db");
     const { tenantId } = await requireTenant();
-    const { appointments, transacoes } = await import("~/db/schema");
+    const { appointments, transacoes, tutores, pets, prontuarios } = await import("~/db/schema");
 
     const horaAtual = new Date().toTimeString().slice(0, 5);
+    let finalTutorId = data.tutorId;
+    let finalPetId = data.petId;
 
-    // Se cliente cadastrado com pet e profissional: cria appointments (gera histórico)
-    if (data.tutorId && data.petId && data.profissionalId && data.servicos.length > 0) {
+    // Criar tutor novo se necessário
+    if (!finalTutorId && data.novoNomeTutor?.trim()) {
+      const newId = crypto.randomUUID();
+      await db.insert(tutores).values({ id: newId, tenantId, nome: data.novoNomeTutor.trim() });
+      finalTutorId = newId;
+    }
+
+    // Criar pet novo se necessário
+    if (finalTutorId && !finalPetId && data.nomePet?.trim()) {
+      const newId = crypto.randomUUID();
+      await db.insert(pets).values({
+        id: newId, tenantId, tutorId: finalTutorId, nome: data.nomePet.trim(),
+      });
+      finalPetId = newId;
+    }
+
+    // Criar appointments (gera histórico do pet)
+    if (finalTutorId && finalPetId && data.profissionalId && data.servicos.length > 0) {
       await Promise.all(
         data.servicos.map((s) =>
           db.insert(appointments).values({
             id: crypto.randomUUID(),
             tenantId,
-            tutorId: data.tutorId!,
-            petId: data.petId!,
+            tutorId: finalTutorId!,
+            petId: finalPetId!,
             professionalId: data.profissionalId!,
             serviceId: s.serviceId,
             data: data.data,
@@ -183,20 +211,36 @@ const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
       );
     }
 
-    const descServicos = data.servicos.map((s) => s.nome).join(", ");
-    const descProdutos = data.produtos.map((p) => `${p.nome}${p.qty > 1 ? ` x${p.qty}` : ""}`).join(", ");
-    const descricao = [
+    // Salvar laudo no prontuário do pet
+    if (finalPetId && data.laudo?.trim()) {
+      const textoLaudo = [
+        data.laudo.trim(),
+        data.itensExtras.filter((i) => i.descricao).map((i) => `• ${i.descricao}`).join("\n"),
+      ].filter(Boolean).join("\n\n");
+
+      await db.insert(prontuarios).values({
+        id: crypto.randomUUID(),
+        tenantId,
+        petId: finalPetId,
+        profissionalId: data.profissionalId ?? null,
+        dataConsulta: data.data,
+        observacoes: textoLaudo,
+      });
+    }
+
+    // Montar descrição da transação
+    const partes = [
       `Atendimento avulso · ${data.tutorNome}`,
-      descServicos,
-      descProdutos,
-    ].filter(Boolean).join(" | ");
+      [...data.servicos.map((s) => s.nome), ...data.itensExtras.filter((i) => i.descricao).map((i) => i.descricao)].join(", "),
+      data.produtos.map((p) => `${p.nome}${p.qty > 1 ? ` x${p.qty}` : ""}`).join(", "),
+    ].filter(Boolean);
 
     await db.insert(transacoes).values({
       id: crypto.randomUUID(),
       tenantId,
       tipo: "receita",
       categoria: data.formaPagamento,
-      descricao,
+      descricao: partes.join(" | "),
       valor: data.total.toFixed(2),
       status: "pago",
       data: data.data,
@@ -211,6 +255,7 @@ type Grupo = Awaited<ReturnType<typeof getCaixa>>["grupos"][number];
 type ProdutoItem = { produtoId: string; nome: string; preco: number; qty: number };
 type DadosAvulso = Awaited<ReturnType<typeof getDadosAvulso>>;
 type ServicoSelecionado = { serviceId: string; nome: string; preco: string };
+type ItemExtra = { id: string; descricao: string; valor: string };
 
 const formas = [
   { key: "Dinheiro", icon: "💵" },
@@ -235,18 +280,22 @@ function AtendimentoAvulsoDialog({
   const [busca, setBusca] = useState("");
   const [semCadastro, setSemCadastro] = useState(false);
   const [nomeAvulso, setNomeAvulso] = useState("");
+  const [nomePetNovo, setNomePetNovo] = useState("");
   const [tutorSel, setTutorSel] = useState<DadosAvulso["tutores"][0] | null>(null);
-  const [petSel, setPetSel] = useState<string>("");
-  const [profSel, setProfSel] = useState<string>("");
+  const [petSel, setPetSel] = useState("");
+  const [profSel, setProfSel] = useState("");
   const [servicosSel, setServicosSel] = useState<ServicoSelecionado[]>([]);
+  const [itensExtras, setItensExtras] = useState<ItemExtra[]>([]);
   const [carrinho, setCarrinho] = useState<ProdutoItem[]>([]);
+  const [laudo, setLaudo] = useState("");
   const [desconto, setDesconto] = useState("0");
   const [formaPag, setFormaPag] = useState("Dinheiro");
 
   function resetar() {
-    setBusca(""); setSemCadastro(false); setNomeAvulso("");
+    setBusca(""); setSemCadastro(false); setNomeAvulso(""); setNomePetNovo("");
     setTutorSel(null); setPetSel(""); setProfSel("");
-    setServicosSel([]); setCarrinho([]); setDesconto("0"); setFormaPag("Dinheiro");
+    setServicosSel([]); setItensExtras([]); setCarrinho([]);
+    setLaudo(""); setDesconto("0"); setFormaPag("Dinheiro");
   }
 
   function fechar() { resetar(); onClose(); }
@@ -259,6 +308,16 @@ function AtendimentoAvulsoDialog({
     });
   }
 
+  function addItemExtra() {
+    setItensExtras((prev) => [...prev, { id: crypto.randomUUID(), descricao: "", valor: "" }]);
+  }
+  function updateItemExtra(id: string, field: "descricao" | "valor", value: string) {
+    setItensExtras((prev) => prev.map((i) => i.id === id ? { ...i, [field]: value } : i));
+  }
+  function removeItemExtra(id: string) {
+    setItensExtras((prev) => prev.filter((i) => i.id !== id));
+  }
+
   function adicionarProduto(p: { id: string; nome: string; preco: string }) {
     setCarrinho((prev) => {
       const ex = prev.find((i) => i.produtoId === p.id);
@@ -266,7 +325,6 @@ function AtendimentoAvulsoDialog({
       return [...prev, { produtoId: p.id, nome: p.nome, preco: parseFloat(p.preco), qty: 1 }];
     });
   }
-
   function removerProduto(produtoId: string) {
     setCarrinho((prev) => {
       const ex = prev.find((i) => i.produtoId === produtoId);
@@ -280,34 +338,69 @@ function AtendimentoAvulsoDialog({
     busca.length >= 2 && t.nome.toLowerCase().includes(busca.toLowerCase())
   );
 
+  const extrasValidos = itensExtras.filter((i) => i.descricao.trim() && parseFloat(i.valor) > 0);
   const descontoNum = parseFloat(desconto || "0") || 0;
   const subServicos = servicosSel.reduce((s, i) => s + parseFloat(i.preco), 0);
+  const subExtras = extrasValidos.reduce((s, i) => s + parseFloat(i.valor), 0);
   const subProdutos = carrinho.reduce((s, i) => s + i.preco * i.qty, 0);
-  const total = Math.max(0, subServicos + subProdutos - descontoNum);
+  const total = Math.max(0, subServicos + subExtras + subProdutos - descontoNum);
 
-  const tutorNome = semCadastro ? (nomeAvulso || "Cliente sem cadastro") : (tutorSel?.nome ?? "");
-  const podeSalvar = (semCadastro || tutorSel) && (servicosSel.length > 0 || carrinho.length > 0);
+  const tutorNome = semCadastro
+    ? (nomeAvulso.trim() || "Cliente sem cadastro")
+    : (tutorSel?.nome ?? "");
+
+  // tem pet vinculado (existente ou novo)
+  const temPet = (tutorSel && petSel) || (semCadastro && nomeAvulso.trim() && nomePetNovo.trim());
+
+  const podeSalvar =
+    (semCadastro || tutorSel) &&
+    (servicosSel.length > 0 || extrasValidos.length > 0 || carrinho.length > 0);
+
+  const profNome = dados?.profissionais.find((p) => p.id === profSel)?.nome ?? "";
+  const petNomeDisplay = tutorSel
+    ? tutorSel.pets.find((p) => p.id === petSel)?.nome ?? ""
+    : nomePetNovo;
 
   const registrar = useMutation({
-    mutationFn: () => registrarAtendimentoAvulso({
-      data: {
-        tutorId: tutorSel?.id,
-        tutorNome,
-        petId: petSel || undefined,
-        profissionalId: profSel || undefined,
-        servicos: servicosSel,
-        produtos: carrinho,
-        desconto: descontoNum,
-        formaPagamento: formaPag,
-        data: dataAtual,
-        total,
-      },
-    }),
+    mutationFn: () =>
+      registrarAtendimentoAvulso({
+        data: {
+          tutorId: tutorSel?.id,
+          novoNomeTutor: semCadastro ? nomeAvulso.trim() : undefined,
+          nomePet: semCadastro ? nomePetNovo.trim() : undefined,
+          petId: tutorSel ? petSel : undefined,
+          profissionalId: profSel || undefined,
+          servicos: servicosSel,
+          itensExtras: extrasValidos,
+          produtos: carrinho,
+          laudo: laudo.trim() || undefined,
+          desconto: descontoNum,
+          formaPagamento: formaPag,
+          data: dataAtual,
+          total,
+          tutorNome,
+        },
+      }),
     onSuccess: () => {
-      // imprime cupom
-      const itensServicos = servicosSel.map((s) => ({ descricao: s.nome, profissional: profSel ? (dados?.profissionais.find((p) => p.id === profSel)?.nome ?? "") : "", valor: parseFloat(s.preco) }));
-      const itensProdutos = carrinho.map((i) => ({ descricao: `${i.nome}${i.qty > 1 ? ` (x${i.qty})` : ""}`, valor: i.preco * i.qty }));
-      printCupom({ nomePetShop, tutor: tutorNome, pets: tutorSel ? (dados?.tutores.find((t) => t.id === tutorSel.id)?.pets.find((p) => p.id === petSel)?.nome ?? "") : "", data: dataAtual, itensServicos, itensProdutos, desconto: descontoNum, total, formaPagamento: formaPag });
+      const itensServicosImp = [
+        ...servicosSel.map((s) => ({ descricao: s.nome, profissional: profNome, valor: parseFloat(s.preco) })),
+        ...extrasValidos.map((i) => ({ descricao: i.descricao, profissional: profNome, valor: parseFloat(i.valor) })),
+      ];
+      const itensProdutosImp = carrinho.map((i) => ({
+        descricao: `${i.nome}${i.qty > 1 ? ` (x${i.qty})` : ""}`,
+        valor: i.preco * i.qty,
+      }));
+      printCupom({
+        nomePetShop,
+        tutor: tutorNome,
+        pets: petNomeDisplay,
+        data: dataAtual,
+        itensServicos: itensServicosImp,
+        itensProdutos: itensProdutosImp,
+        desconto: descontoNum,
+        total,
+        formaPagamento: formaPag,
+      });
       toast.success("Atendimento registrado!");
       fechar();
       onSuccess();
@@ -328,29 +421,36 @@ function AtendimentoAvulsoDialog({
 
         <div className="space-y-5 pb-2">
 
-          {/* ── Cliente ──────────────────────────────────────────────── */}
+          {/* ── Cliente ─────────────────────────────────────────────── */}
           <div className="space-y-2">
             <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Cliente</Label>
 
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={semCadastro} onChange={(e) => { setSemCadastro(e.target.checked); setTutorSel(null); setBusca(""); }} />
-                Cliente sem cadastro
-              </label>
-            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={semCadastro}
+                onChange={(e) => { setSemCadastro(e.target.checked); setTutorSel(null); setBusca(""); setNomePetNovo(""); }} />
+              Cliente sem cadastro
+            </label>
 
             {semCadastro ? (
-              <Input placeholder="Nome (opcional)" value={nomeAvulso} onChange={(e) => setNomeAvulso(e.target.value)} />
+              <div className="space-y-2">
+                <Input placeholder="Nome do tutor (opcional)" value={nomeAvulso} onChange={(e) => setNomeAvulso(e.target.value)} />
+                {nomeAvulso.trim() && (
+                  <Input placeholder="Nome do pet" value={nomePetNovo} onChange={(e) => setNomePetNovo(e.target.value)} />
+                )}
+                {nomeAvulso.trim() && (
+                  <p className="text-xs text-muted-foreground">
+                    {nomePetNovo.trim()
+                      ? "✓ Tutor e pet serão cadastrados automaticamente ao confirmar."
+                      : "Informe o nome do pet para cadastrá-lo."}
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="space-y-1">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    className="pl-8"
-                    placeholder="Buscar tutor pelo nome..."
-                    value={busca}
-                    onChange={(e) => { setBusca(e.target.value); setTutorSel(null); setPetSel(""); }}
-                  />
+                  <Input className="pl-8" placeholder="Buscar tutor pelo nome..."
+                    value={busca} onChange={(e) => { setBusca(e.target.value); setTutorSel(null); setPetSel(""); }} />
                 </div>
                 {tutorSel && (
                   <div className="flex items-center justify-between rounded-lg bg-primary/10 border border-primary/30 px-3 py-2">
@@ -378,7 +478,7 @@ function AtendimentoAvulsoDialog({
             )}
           </div>
 
-          {/* ── Pet (só se tutor selecionado) ────────────────────────── */}
+          {/* ── Pet (tutor cadastrado) ───────────────────────────────── */}
           {tutorSel && petDoTutor.length > 0 && (
             <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pet</Label>
@@ -394,11 +494,11 @@ function AtendimentoAvulsoDialog({
             </div>
           )}
 
-          {/* ── Profissional (só se tutor + pet selecionados) ─────────── */}
-          {tutorSel && petSel && (
+          {/* ── Profissional (quando há pet vinculado) ──────────────── */}
+          {temPet && (
             <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Profissional <span className="text-muted-foreground normal-case font-normal">(para registrar no histórico)</span>
+                Profissional <span className="text-muted-foreground normal-case font-normal">(para histórico do pet)</span>
               </Label>
               <Select value={profSel} onValueChange={setProfSel}>
                 <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
@@ -411,9 +511,9 @@ function AtendimentoAvulsoDialog({
             </div>
           )}
 
-          {/* ── Serviços ─────────────────────────────────────────────── */}
+          {/* ── Serviços do catálogo ─────────────────────────────────── */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Serviços Realizados</Label>
+            <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Serviços do Catálogo</Label>
             {(dados?.servicos ?? []).length === 0 ? (
               <p className="text-xs text-muted-foreground">Nenhum serviço cadastrado.</p>
             ) : (
@@ -435,7 +535,46 @@ function AtendimentoAvulsoDialog({
             )}
           </div>
 
-          {/* ── Produtos ─────────────────────────────────────────────── */}
+          {/* ── Itens extras / Procedimentos livres ─────────────────── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Procedimentos / Itens Extras
+              </Label>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addItemExtra}>
+                <Plus className="h-3 w-3" /> Adicionar
+              </Button>
+            </div>
+            {itensExtras.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Use para cirurgias, procedimentos ou serviços que não estão no catálogo.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {itensExtras.map((item) => (
+                  <div key={item.id} className="flex gap-2 items-center">
+                    <Input
+                      className="flex-1 h-8 text-xs"
+                      placeholder="Descrição do procedimento"
+                      value={item.descricao}
+                      onChange={(e) => updateItemExtra(item.id, "descricao", e.target.value)}
+                    />
+                    <Input
+                      className="w-28 h-8 text-xs text-right"
+                      placeholder="R$ 0,00"
+                      value={item.valor}
+                      onChange={(e) => updateItemExtra(item.id, "valor", e.target.value)}
+                    />
+                    <button onClick={() => removeItemExtra(item.id)} className="text-muted-foreground hover:text-destructive shrink-0">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Produtos ────────────────────────────────────────────── */}
           {catalogoProdutos.length > 0 && (
             <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -471,16 +610,32 @@ function AtendimentoAvulsoDialog({
             </div>
           )}
 
-          {/* ── Pagamento ────────────────────────────────────────────── */}
+          {/* ── Laudo / Observações ──────────────────────────────────── */}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+              <ClipboardList className="h-3.5 w-3.5" /> Laudo / Observações
+              {temPet && <span className="font-normal normal-case text-primary">(salvo no prontuário do pet)</span>}
+            </Label>
+            <textarea
+              value={laudo}
+              onChange={(e) => setLaudo(e.target.value)}
+              placeholder={temPet
+                ? "Ex: Pet apresentou hérnia abdominal. Intervenção cirúrgica realizada com sucesso. Retorno em 10 dias."
+                : "Descreva o que foi realizado no atendimento..."}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              rows={3}
+            />
+          </div>
+
+          {/* ── Pagamento ───────────────────────────────────────────── */}
           <div className="space-y-3 border-t border-border pt-4">
             <Label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pagamento</Label>
 
             <div className="space-y-1.5 text-sm">
-              {subProdutos > 0 && <>
-                <div className="flex justify-between"><span className="text-muted-foreground">Serviços</span><span>{formatCurrency(subServicos)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Produtos</span><span>{formatCurrency(subProdutos)}</span></div>
-              </>}
-              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(subServicos + subProdutos)}</span></div>
+              {subServicos > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Serviços</span><span>{formatCurrency(subServicos)}</span></div>}
+              {subExtras > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Procedimentos extras</span><span>{formatCurrency(subExtras)}</span></div>}
+              {subProdutos > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Produtos</span><span>{formatCurrency(subProdutos)}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(subServicos + subExtras + subProdutos)}</span></div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Desconto (R$)</span>
                 <input type="number" min="0" step="0.01" value={desconto} onChange={(e) => setDesconto(e.target.value)}
@@ -509,7 +664,9 @@ function AtendimentoAvulsoDialog({
 
             {!podeSalvar && (
               <p className="text-xs text-muted-foreground text-center">
-                {!tutorSel && !semCadastro ? "Selecione um cliente ou marque 'sem cadastro'" : "Selecione ao menos um serviço ou produto"}
+                {!tutorSel && !semCadastro
+                  ? "Selecione um cliente ou marque 'sem cadastro'"
+                  : "Selecione ao menos um serviço, procedimento ou produto"}
               </p>
             )}
           </div>
@@ -647,7 +804,7 @@ function CaixaPage() {
   return (
     <div className="-m-6 flex overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
 
-      {/* ── Painel esquerdo ────────────────────────────────────────── */}
+      {/* ── Painel esquerdo ─────────────────────────────────────────── */}
       <div className="w-80 shrink-0 border-r border-border flex flex-col overflow-hidden bg-card">
         <div className="p-3 border-b border-border space-y-2">
           <div className="flex items-center gap-1">
@@ -660,7 +817,8 @@ function CaixaPage() {
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => mudarDia(1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => { setDataAtual(new Date().toISOString().slice(0, 10)); setSelecionado(null); setCarrinho([]); }}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs px-2"
+              onClick={() => { setDataAtual(new Date().toISOString().slice(0, 10)); setSelecionado(null); setCarrinho([]); }}>
               Hoje
             </Button>
           </div>
@@ -689,11 +847,9 @@ function CaixaPage() {
                       <p className="text-sm font-semibold truncate">{g.tutor.nome}</p>
                       <p className="text-xs text-muted-foreground">{g.tutor.telefone ?? ""}</p>
                     </div>
-                    {g.pago ? (
-                      <Badge variant="success" className="text-[10px] px-1.5 py-0 shrink-0">Pago</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{g.appointments.length} serv.</Badge>
-                    )}
+                    {g.pago
+                      ? <Badge variant="success" className="text-[10px] px-1.5 py-0 shrink-0">Pago</Badge>
+                      : <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{g.appointments.length} serv.</Badge>}
                   </div>
                   {!g.pago && <p className="text-xs font-medium text-primary mt-1">{formatCurrency(g.total)}</p>}
                   {g.pago && <p className="text-xs text-success mt-1">{formatCurrency(g.valorPago)}</p>}
@@ -708,7 +864,7 @@ function CaixaPage() {
         </div>
       </div>
 
-      {/* ── Painel direito ─────────────────────────────────────────── */}
+      {/* ── Painel direito ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-6">
         {!selecionado ? (
           <div className="flex h-full items-center justify-center">
@@ -738,7 +894,9 @@ function CaixaPage() {
                       <p className="text-xs text-muted-foreground">{a.pet?.nome} · {a.professional?.nome} · {a.horaInicio}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant={a.status === "concluido" ? "success" : "secondary"} className="text-xs">{a.status.replace("_", " ")}</Badge>
+                      <Badge variant={a.status === "concluido" ? "success" : "secondary"} className="text-xs">
+                        {a.status.replace("_", " ")}
+                      </Badge>
                       <span className="text-sm font-medium w-20 text-right">{formatCurrency(a.preco)}</span>
                     </div>
                   </div>
@@ -779,9 +937,6 @@ function CaixaPage() {
                       </div>
                     ))}
                   </div>
-                )}
-                {catalogo.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nenhum produto cadastrado. Cadastre em <strong>Produtos</strong> no menu.</p>
                 )}
               </div>
             )}
@@ -840,7 +995,6 @@ function CaixaPage() {
         )}
       </div>
 
-      {/* ── Dialog Atendimento Avulso ──────────────────────────────── */}
       <AtendimentoAvulsoDialog
         open={avulsoOpen}
         onClose={() => setAvulsoOpen(false)}

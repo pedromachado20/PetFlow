@@ -358,9 +358,13 @@ Tipo: Despesa · Categoria: Aluguel · Descrição: "Aluguel julho/2025" · Valo
 <ul>
   <li><strong>Nome do Pet Shop:</strong> Aparece nos cupons e recibos</li>
   <li><strong>Logo:</strong> Imagem da sua marca</li>
-  <li><strong>WhatsApp Business:</strong> Para envio de lembretes automáticos de agendamento</li>
+  <li><strong>WhatsApp:</strong> Para envio de lembretes automáticos para os clientes</li>
 </ul>
 <div class="atencao"><strong>⚠️ Atenção:</strong> O nome do pet shop é muito importante — ele aparece em todos os documentos impressos (cupom, recibo). Confira se está certo!</div>
+<h3>Sobre a integração com o WhatsApp</h3>
+<p>O PetFlow pode enviar mensagens automáticas para os clientes pelo WhatsApp — como confirmação de agendamento, lembrete de horário e aviso de vacina vencendo. Para isso, é preciso conectar o WhatsApp do pet shop ao sistema.</p>
+<p>Não se preocupe: <strong>o próprio sistema explica como fazer isso, passo a passo, sem precisar chamar nenhum técnico.</strong> Basta ir em <strong>Configurações → Integração WhatsApp</strong>, escolher o provedor desejado (Z-API ou Evolution API) e clicar em <strong>"Como configurar — passo a passo"</strong>. Um guia completo vai aparecer na tela com todas as instruções, desde criar a conta até testar o envio da primeira mensagem.</p>
+<div class="dica"><strong>💡 Dica:</strong> A integração com WhatsApp é opcional. O sistema funciona normalmente sem ela — você apenas não terá o envio automático de mensagens.</div>
 
 <h2>16. Dicas e Boas Práticas</h2>
 <h3>Ordem certa para o dia a dia:</h3>
@@ -693,9 +697,22 @@ function AjudaPage() {
         <ul className="list-disc pl-6 space-y-1 my-2">
           <li><strong>Nome do Pet Shop:</strong> Aparece em todos os cupons e recibos</li>
           <li><strong>Logo:</strong> Imagem da sua marca</li>
-          <li><strong>WhatsApp:</strong> Para envio de lembretes automáticos</li>
+          <li><strong>WhatsApp:</strong> Para envio de lembretes automáticos para os clientes</li>
         </ul>
         <Atencao>Confira se o nome do pet shop está correto — ele aparece em todos os documentos impressos!</Atencao>
+
+        <p className="font-semibold mt-2">Sobre a integração com o WhatsApp:</p>
+        <p>
+          O PetFlow pode enviar mensagens automáticas para os clientes pelo WhatsApp — como confirmação de agendamento,
+          lembrete de horário e aviso de vacina vencendo. Para isso, é preciso conectar o WhatsApp do pet shop ao sistema.
+        </p>
+        <p>
+          Não se preocupe: <strong>o próprio sistema explica como fazer isso, passo a passo, sem precisar chamar nenhum técnico.</strong>{" "}
+          Basta ir em <strong>Configurações → Integração WhatsApp</strong>, escolher o provedor desejado (Z-API ou Evolution API)
+          e clicar em <strong>"Como configurar — passo a passo"</strong>. Um guia completo vai aparecer na tela com todas as
+          instruções, desde criar a conta até testar o envio da primeira mensagem.
+        </p>
+        <Dica>A integração com WhatsApp é opcional. O sistema funciona normalmente sem ela — você apenas não terá o envio automático de mensagens.</Dica>
       </Secao>
 
       <Secao numero={16} titulo="Dicas e Boas Práticas">

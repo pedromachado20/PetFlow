@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, TrendingUp, TrendingDown, DollarSign, Printer } from "lucide-react";
-import { printTable } from "~/lib/pdf";
+import { printFinanceiro } from "~/lib/pdf";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -97,6 +97,23 @@ function FinanceiroPage() {
     onError: () => toast.error("Erro ao salvar lançamento"),
   });
 
+  const nomeMes = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+
+  function imprimir(tipo: "receita" | "despesa" | "ambos") {
+    if (!data) return;
+    const receitas = data.transacoes.filter((t) => t.tipo === "receita");
+    const despesas = data.transacoes.filter((t) => t.tipo === "despesa");
+    printFinanceiro({
+      nomeMes,
+      tipo,
+      receitas,
+      despesas,
+      totalReceitas: data.totalReceitas,
+      totalDespesas: data.totalDespesas,
+      saldo: data.saldo,
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 grid-cols-3">
@@ -126,20 +143,16 @@ function FinanceiroPage() {
       <div className="flex items-center justify-between">
         <h3 className="font-semibold">Lançamentos do Mês</h3>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() =>
-            printTable(
-              "Financeiro — Lançamentos do Mês",
-              ["Data", "Tipo", "Categoria", "Descrição", "Valor"],
-              (data?.transacoes ?? []).map((t) => [
-                new Date(t.data + "T00:00:00").toLocaleDateString("pt-BR"),
-                t.tipo,
-                t.categoria,
-                t.descricao,
-                (t.tipo === "receita" ? "+ " : "- ") + parseFloat(t.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-              ])
-            )
-          }>
-            <Printer className="h-4 w-4" /> PDF
+          <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() => imprimir("receita")}
+            className="text-green-700 border-green-300 hover:bg-green-50">
+            <Printer className="h-4 w-4" /> Receitas
+          </Button>
+          <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() => imprimir("despesa")}
+            className="text-red-700 border-red-300 hover:bg-red-50">
+            <Printer className="h-4 w-4" /> Despesas
+          </Button>
+          <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() => imprimir("ambos")}>
+            <Printer className="h-4 w-4" /> Completo
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>

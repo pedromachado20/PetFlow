@@ -20,6 +20,138 @@ const BASE_CSS = `
   @media print { body { padding: 12px; } }
 `;
 
+export function printFinanceiro(opts: {
+  nomeMes: string;
+  tipo: "receita" | "despesa" | "ambos";
+  receitas: { data: string; categoria: string; descricao: string; valor: string }[];
+  despesas: { data: string; categoria: string; descricao: string; valor: string }[];
+  totalReceitas: number;
+  totalDespesas: number;
+  saldo: number;
+}) {
+  const fmt = (v: number | string) =>
+    parseFloat(String(v)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const fmtData = (d: string) =>
+    new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
+
+  const rowsReceitas = opts.receitas
+    .map((r) => `<tr>
+      <td>${fmtData(r.data)}</td>
+      <td>${r.categoria}</td>
+      <td>${r.descricao}</td>
+      <td class="val green">+ ${fmt(r.valor)}</td>
+    </tr>`)
+    .join("");
+
+  const rowsDespesas = opts.despesas
+    .map((r) => `<tr>
+      <td>${fmtData(r.data)}</td>
+      <td>${r.categoria}</td>
+      <td>${r.descricao}</td>
+      <td class="val red">- ${fmt(r.valor)}</td>
+    </tr>`)
+    .join("");
+
+  const secaoReceitas = `
+    <div class="section-header green-bg">
+      <span>RECEITAS</span>
+      <span>${fmt(opts.totalReceitas)}</span>
+    </div>
+    <table>
+      <thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>
+        ${rowsReceitas || "<tr><td colspan='4' style='color:#999;text-align:center;padding:12px'>Nenhuma receita no período</td></tr>"}
+        <tr class="subtotal-row green-row">
+          <td colspan="3"><strong>Total Receitas</strong></td>
+          <td class="val green"><strong>${fmt(opts.totalReceitas)}</strong></td>
+        </tr>
+      </tbody>
+    </table>`;
+
+  const divisor = `<div class="divisor"></div>`;
+
+  const secaoDespesas = `
+    <div class="section-header red-bg">
+      <span>DESPESAS</span>
+      <span>${fmt(opts.totalDespesas)}</span>
+    </div>
+    <table>
+      <thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>
+        ${rowsDespesas || "<tr><td colspan='4' style='color:#999;text-align:center;padding:12px'>Nenhuma despesa no período</td></tr>"}
+        <tr class="subtotal-row red-row">
+          <td colspan="3"><strong>Total Despesas</strong></td>
+          <td class="val red"><strong>${fmt(opts.totalDespesas)}</strong></td>
+        </tr>
+      </tbody>
+    </table>`;
+
+  const resumoFinal = opts.tipo === "ambos" ? `
+    <div class="resumo-final">
+      <div class="resumo-linha"><span>Total Receitas</span><span class="green">${fmt(opts.totalReceitas)}</span></div>
+      <div class="resumo-linha"><span>Total Despesas</span><span class="red">- ${fmt(opts.totalDespesas)}</span></div>
+      <div class="resumo-linha saldo-linha">
+        <span>SALDO DO MÊS</span>
+        <span class="${opts.saldo >= 0 ? "green" : "red"}">${fmt(opts.saldo)}</span>
+      </div>
+    </div>` : "";
+
+  const titulo = opts.tipo === "receita"
+    ? `Receitas — ${opts.nomeMes}`
+    : opts.tipo === "despesa"
+    ? `Despesas — ${opts.nomeMes}`
+    : `Financeiro Completo — ${opts.nomeMes}`;
+
+  const corpo = opts.tipo === "receita"
+    ? secaoReceitas
+    : opts.tipo === "despesa"
+    ? secaoDespesas
+    : secaoReceitas + divisor + secaoDespesas;
+
+  openPrint(`<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="utf-8">
+<title>${titulo}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; padding: 28px 36px; }
+  .cabecalho { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 2px solid #111; }
+  .cabecalho h1 { font-size: 20px; }
+  .cabecalho p { font-size: 10px; color: #777; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  th { background: #f4f4f4; text-align: left; padding: 7px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; border-bottom: 2px solid #ddd; }
+  th:last-child { text-align: right; }
+  td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .val { text-align: right; white-space: nowrap; }
+  .green { color: #16a34a; }
+  .red { color: #dc2626; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 6px 6px 0 0; font-weight: bold; font-size: 13px; margin-top: 8px; }
+  .green-bg { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; border-bottom: none; }
+  .red-bg { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; border-bottom: none; }
+  .subtotal-row td { background: #fafafa; padding-top: 8px; padding-bottom: 8px; }
+  .green-row td { border-top: 1px solid #bbf7d0; }
+  .red-row td { border-top: 1px solid #fecaca; }
+  .divisor { margin: 28px 0; border: none; border-top: 2px dashed #d1d5db; position: relative; }
+  .divisor::after { content: ""; display: block; }
+  .resumo-final { margin-top: 28px; border: 2px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  .resumo-linha { display: flex; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .resumo-linha:last-child { border-bottom: none; }
+  .saldo-linha { background: #f8fafc; font-weight: bold; font-size: 15px; }
+  @media print { body { padding: 16px; } }
+</style>
+</head><body>
+<div class="cabecalho">
+  <div>
+    <h1>${titulo}</h1>
+    <p>Gerado em ${new Date().toLocaleString("pt-BR")}</p>
+  </div>
+</div>
+${corpo}
+${resumoFinal}
+</body></html>`);
+}
+
 export function printTable(title: string, headers: string[], rows: (string | number)[][], info = "") {
   const bodyRows = rows.map((r) => `<tr>${r.map((c) => `<td>${c ?? "-"}</td>`).join("")}</tr>`).join("");
   openPrint(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>

@@ -161,7 +161,7 @@ function CaixaPage() {
         const updated = fresh.grupos.find((g) => g.tutor.id === tutorId);
         if (updated) setSelecionado(updated);
       }
-      setCarrinho([]);
+      // carrinho mantido para impressão imediata após pagamento
       toast.success("Pagamento registrado!");
     },
     onError: (e: any) => toast.error(e.message ?? "Erro ao registrar pagamento"),
@@ -222,16 +222,15 @@ function CaixaPage() {
     }));
     const itensProdutos = carrinho.map((i) => ({
       descricao: `${i.nome}${i.qty > 1 ? ` (x${i.qty})` : ""}`,
-      profissional: "",
       valor: i.preco * i.qty,
     }));
-    const itens = [...itensServicos, ...itensProdutos];
     const opts = {
       nomePetShop,
       tutor: selecionado.tutor.nome,
       pets,
       data: dataAtual,
-      itens,
+      itensServicos,
+      itensProdutos,
       desconto: descontoNum,
       total: selecionado.pago ? selecionado.valorPago : total,
       formaPagamento: selecionado.pago ? selecionado.formaPagamento : formaPagamento,
@@ -422,7 +421,7 @@ function CaixaPage() {
                     <FileText className="h-4 w-4" /> Recibo PDF
                   </Button>
                 </div>
-                <button onClick={() => setSelecionado(null)} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
+                <button onClick={() => { setSelecionado(null); setCarrinho([]); }} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
                   Próximo cliente →
                 </button>
               </div>

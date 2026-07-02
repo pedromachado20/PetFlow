@@ -14,6 +14,7 @@ import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { ImageUpload } from "~/components/ui/image-upload";
 import { toast } from "sonner";
 import { formatCurrency } from "~/lib/utils";
 
@@ -37,6 +38,7 @@ const salvarProduto = createServerFn({ method: "POST" })
     nome: z.string().min(1),
     categoria: z.string().min(1),
     preco: z.string(),
+    fotoUrl: z.string().optional(),
   }))
   .handler(async ({ data }) => {
     const { requireTenant } = await import("~/server/context");
@@ -45,7 +47,7 @@ const salvarProduto = createServerFn({ method: "POST" })
     const { produtos } = await import("~/db/schema");
     const { eq, and } = await import("drizzle-orm");
     if (data.id) {
-      await db.update(produtos).set({ nome: data.nome, categoria: data.categoria, preco: data.preco, updatedAt: new Date() })
+      await db.update(produtos).set({ nome: data.nome, categoria: data.categoria, preco: data.preco, fotoUrl: data.fotoUrl, updatedAt: new Date() })
         .where(and(eq(produtos.id, data.id), eq(produtos.tenantId, tenantId)));
     } else {
       await db.insert(produtos).values({ id: crypto.randomUUID(), tenantId, ...data });
@@ -94,6 +96,7 @@ function ProdutosPage() {
   const [editando, setEditando] = useState<Produto | null>(null);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [catSel, setCatSel] = useState("");
+  const [foto, setFoto] = useState<string | null>(null);
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["produtos"],
@@ -105,6 +108,7 @@ function ProdutosPage() {
   function abrirNovo() {
     setEditando(null);
     setCatSel("");
+    setFoto(null);
     reset({ nome: "", categoria: "", preco: "" });
     setOpen(true);
   }
@@ -112,13 +116,14 @@ function ProdutosPage() {
   function abrirEditar(p: Produto) {
     setEditando(p);
     setCatSel(p.categoria);
+    setFoto(p.fotoUrl ?? null);
     reset({ nome: p.nome, categoria: p.categoria, preco: p.preco ?? "" });
     setOpen(true);
   }
 
   const salvar = useMutation({
     mutationFn: (values: z.infer<typeof schema>) =>
-      salvarProduto({ data: { ...values, id: editando?.id } }),
+      salvarProduto({ data: { ...values, id: editando?.id, fotoUrl: foto ?? undefined } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["produtos"] });
       toast.success(editando ? "Produto atualizado" : "Produto criado");
@@ -171,6 +176,7 @@ function ProdutosPage() {
             <DialogTitle>{editando ? "Editar Produto" : "Novo Produto"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit((v) => salvar.mutate(v))} className="space-y-3">
+            <ImageUpload label="Foto do Produto" value={foto} onChange={setFoto} />
             <div className="space-y-1.5">
               <Label>Nome *</Label>
               <Input {...register("nome")} placeholder="Ex: Ração Golden 15kg" />
@@ -231,11 +237,22 @@ function ProdutosPage() {
                 {cat.itens.map((p) => (
                   <Card key={p.id}>
                     <CardContent className="p-4 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-semibold truncate">{p.nome}</p>
-                        <Badge variant="outline" className="shrink-0 text-xs">{cat.label}</Badge>
+                      <div className="flex items-start gap-3">
+                        {p.fotoUrl ? (
+                          <img src={p.fotoUrl} alt={p.nome} className="h-12 w-12 rounded-md object-cover shrink-0 border border-border" />
+                        ) : (
+                          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-secondary border border-border">
+                            <Package className="h-5 w-5 text-muted-foreground" />
+                          </span>
+                        )}
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-semibold truncate">{p.nome}</p>
+                            <Badge variant="outline" className="shrink-0 text-xs">{cat.label}</Badge>
+                          </div>
+                          <p className="text-lg font-bold text-primary">{formatCurrency(p.preco)}</p>
+                        </div>
                       </div>
-                      <p className="text-lg font-bold text-primary">{formatCurrency(p.preco)}</p>
                       <div className="flex gap-1 pt-1 border-t border-border">
                         <Button variant="ghost" size="sm" className="flex-1 h-7 text-xs" onClick={() => abrirEditar(p)}>
                           <Pencil className="h-3.5 w-3.5" /> Editar

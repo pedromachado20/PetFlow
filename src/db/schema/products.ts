@@ -7,6 +7,7 @@ export const produtos = pgTable("produtos", {
   nome: text("nome").notNull(),
   categoria: text("categoria").notNull().default("geral"),
   preco: numeric("preco", { precision: 10, scale: 2 }).notNull().default("0"),
+  fotoUrl: text("foto_url"),
   ativo: boolean("ativo").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

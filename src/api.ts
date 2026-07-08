@@ -19,12 +19,23 @@ async function handleAsaasWebhook(request: Request): Promise<Response> {
       .where(eq(tenants.asaasSubscriptionId, subscriptionId));
   }
 
-  if (subscriptionId && (body?.event === "PAYMENT_OVERDUE" || body?.event === "PAYMENT_DELETED" || body?.event === "PAYMENT_REFUNDED")) {
+  if (subscriptionId && body?.event === "PAYMENT_OVERDUE") {
+    // Assinatura continua existindo no Asaas — o cliente ainda pode pagar a mesma fatura atrasada.
     const { db } = await import("~/db");
     const { eq } = await import("drizzle-orm");
     const { tenants } = await import("~/db/schema");
     await db.update(tenants)
       .set({ status: "suspenso", updatedAt: new Date() })
+      .where(eq(tenants.asaasSubscriptionId, subscriptionId));
+  }
+
+  if (subscriptionId && (body?.event === "PAYMENT_DELETED" || body?.event === "PAYMENT_REFUNDED")) {
+    // Cobrança removida/estornada — limpa o asaasSubscriptionId para liberar uma nova assinatura do zero.
+    const { db } = await import("~/db");
+    const { eq } = await import("drizzle-orm");
+    const { tenants } = await import("~/db/schema");
+    await db.update(tenants)
+      .set({ status: "suspenso", asaasSubscriptionId: null, updatedAt: new Date() })
       .where(eq(tenants.asaasSubscriptionId, subscriptionId));
   }
 

@@ -19,6 +19,15 @@ async function handleAsaasWebhook(request: Request): Promise<Response> {
       .where(eq(tenants.asaasSubscriptionId, subscriptionId));
   }
 
+  if (subscriptionId && (body?.event === "PAYMENT_OVERDUE" || body?.event === "PAYMENT_DELETED" || body?.event === "PAYMENT_REFUNDED")) {
+    const { db } = await import("~/db");
+    const { eq } = await import("drizzle-orm");
+    const { tenants } = await import("~/db/schema");
+    await db.update(tenants)
+      .set({ status: "suspenso", updatedAt: new Date() })
+      .where(eq(tenants.asaasSubscriptionId, subscriptionId));
+  }
+
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
 }
 

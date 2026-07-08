@@ -19,29 +19,39 @@ const checkSession = createServerFn({ method: "GET" }).handler(async () => {
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, session.user.id),
-    columns: { tenantId: true, role: true },
+    columns: { tenantId: true, role: true, ativo: true },
   });
 
   if (!user?.tenantId) {
     throw redirect({ to: "/onboarding" });
   }
+  if (!user.ativo) {
+    throw redirect({ to: "/login" });
+  }
 
   const tenant = await db.query.tenants.findFirst({
     where: eq(tenants.id, user.tenantId),
-    columns: { nome: true },
+    columns: { nome: true, status: true, trialEndsAt: true, asaasSubscriptionId: true },
   });
+
+  const trialExpirado = tenant?.status === "trial" && tenant.trialEndsAt ? tenant.trialEndsAt.getTime() < Date.now() : false;
+  const bloqueado = tenant?.status === "suspenso" || (trialExpirado && !tenant?.asaasSubscriptionId);
 
   return {
     session,
     tenantNome: tenant?.nome ?? "",
     userRole: user.role ?? "atendente",
+    bloqueado,
   };
 });
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const data = await checkSession();
     if (!data) throw redirect({ to: "/login" });
+    if (data.bloqueado && location.pathname !== "/assinatura") {
+      throw redirect({ to: "/assinatura" });
+    }
     return { session: data.session, tenantNome: data.tenantNome, userRole: data.userRole };
   },
   component: AppLayout,

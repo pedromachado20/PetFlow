@@ -32,6 +32,9 @@ export const tenants = pgTable("tenants", {
   notifVencimento: boolean("notif_vencimento").notNull().default(false),
   ativo: boolean("ativo").notNull().default(true),
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  trialReminderSentAt: timestamp("trial_reminder_sent_at", { withTimezone: true }),
+  asaasCustomerId: text("asaas_customer_id"),
+  asaasSubscriptionId: text("asaas_subscription_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -168,11 +168,31 @@ const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
     const { requireTenant } = await import("~/server/context");
     const { db } = await import("~/db");
     const { tenantId } = await requireTenant();
-    const { appointments, transacoes, tutores, pets, prontuarios } = await import("~/db/schema");
+    const { appointments, transacoes, tutores, pets, prontuarios, professionals, services } = await import("~/db/schema");
+    const { eq, and } = await import("drizzle-orm");
 
     const horaAtual = new Date().toTimeString().slice(0, 5);
     let finalTutorId = data.tutorId;
     let finalPetId = data.petId;
+
+    // Validar que tutor/pet/profissional existentes pertencem a este tenant
+    if (finalTutorId) {
+      const tutorValido = await db.query.tutores.findFirst({ where: and(eq(tutores.id, finalTutorId), eq(tutores.tenantId, tenantId)) });
+      if (!tutorValido) throw new Error("Tutor não encontrado");
+    }
+    if (finalPetId) {
+      const petValido = await db.query.pets.findFirst({ where: and(eq(pets.id, finalPetId), eq(pets.tenantId, tenantId)) });
+      if (!petValido) throw new Error("Pet não encontrado");
+    }
+    if (data.profissionalId) {
+      const profissionalValido = await db.query.professionals.findFirst({ where: and(eq(professionals.id, data.profissionalId), eq(professionals.tenantId, tenantId)) });
+      if (!profissionalValido) throw new Error("Profissional não encontrado");
+    }
+    if (data.servicos.length > 0) {
+      const servicosValidos = await db.query.services.findMany({ where: and(eq(services.tenantId, tenantId)) });
+      const idsValidos = new Set(servicosValidos.map((s) => s.id));
+      if (data.servicos.some((s) => !idsValidos.has(s.serviceId))) throw new Error("Serviço não encontrado");
+    }
 
     // Criar tutor novo se necessário
     if (!finalTutorId && data.novoNomeTutor?.trim()) {

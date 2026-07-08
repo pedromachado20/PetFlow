@@ -7,6 +7,12 @@ export type UserRole = "owner" | "admin" | "veterinario" | "atendente";
 export const ADMIN_ROLES: UserRole[] = ["owner", "admin"];
 export const ALL_ROLES: UserRole[] = ["owner", "admin", "veterinario", "atendente"];
 
+export function requireRole(userRole: UserRole | null | undefined, allowed: UserRole[]) {
+  if (!userRole || !allowed.includes(userRole)) {
+    throw new Error("Permissão negada para esta ação");
+  }
+}
+
 export async function requireAuth() {
   const [{ getWebRequest }, { auth }] = await Promise.all([
     import("@tanstack/start/server"),
@@ -29,6 +35,7 @@ export async function requireTenant() {
   });
 
   if (!user?.tenantId) throw new Error("Pet shop não configurado");
+  if (!user.ativo) throw new Error("Usuário desativado");
 
   return {
     tenantId: user.tenantId,

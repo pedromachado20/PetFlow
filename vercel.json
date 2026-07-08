@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm run build",
   "framework": null,
-  "installCommand": "npm install --legacy-peer-deps"
+  "installCommand": "npm install --legacy-peer-deps",
+  "crons": [
+    {
+      "path": "/api/cron/trial-reminder",
+      "schedule": "0 12 * * *"
+    }
+  ]
 }

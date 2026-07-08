@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarDays, Users, PawPrint, Scissors,
   UserCheck, DollarSign, BarChart3, Settings, ChevronLeft,
-  ChevronRight, CreditCard, Receipt, ShoppingBag, HelpCircle,
+  ChevronRight, CreditCard, Receipt, ShoppingBag, HelpCircle, Wallet,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 
@@ -37,6 +37,7 @@ const navItems = [
     items: [
       { icon: DollarSign,   label: "Financeiro",    to: "/financeiro" },
       { icon: BarChart3,    label: "Relatórios",    to: "/relatorios" },
+      { icon: Wallet,       label: "Assinatura",    to: "/assinatura" },
       { icon: Settings,     label: "Configurações", to: "/configuracoes" },
       { icon: HelpCircle,   label: "Ajuda",         to: "/ajuda" },
     ],

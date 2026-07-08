@@ -24,8 +24,10 @@ const criarPetShop = createServerFn({ method: "POST" })
     const { eq } = await import("drizzle-orm");
 
     const { slugify } = await import("~/lib/utils");
+    const { TRIAL_DAYS } = await import("~/lib/billing");
 
     const slug = slugify(data.nomePetShop) + "-" + Math.random().toString(36).slice(2, 6);
+    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 
     const tenantId = crypto.randomUUID();
     await db.insert(tenants).values({
@@ -34,6 +36,7 @@ const criarPetShop = createServerFn({ method: "POST" })
       slug,
       email: data.email,
       telefone: data.telefone,
+      trialEndsAt,
     });
 
     const signUpResult = await auth.api.signUpEmail({

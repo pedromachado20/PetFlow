@@ -53,11 +53,13 @@ const salvarAgendamento = createServerFn({ method: "POST" })
     const { requireTenant } = await import("~/server/context");
     const { db } = await import("~/db");
     const { tenantId } = await requireTenant();
-    const { appointments, pets, services } = await import("~/db/schema");
+    const { appointments, pets, services, professionals } = await import("~/db/schema");
     const { eq, and } = await import("drizzle-orm");
 
-    const pet = await db.query.pets.findFirst({ where: eq(pets.id, data.petId) });
-    const service = await db.query.services.findFirst({ where: eq(services.id, data.serviceId) });
+    const pet = await db.query.pets.findFirst({ where: and(eq(pets.id, data.petId), eq(pets.tenantId, tenantId)) });
+    const service = await db.query.services.findFirst({ where: and(eq(services.id, data.serviceId), eq(services.tenantId, tenantId)) });
+    const professional = await db.query.professionals.findFirst({ where: and(eq(professionals.id, data.professionalId), eq(professionals.tenantId, tenantId)) });
+    if (!pet || !service || !professional) throw new Error("Pet, serviço ou profissional não encontrado");
 
     if (data.id) {
       await db.update(appointments)

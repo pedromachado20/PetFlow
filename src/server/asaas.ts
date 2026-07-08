@@ -44,7 +44,9 @@ export async function criarAssinatura(opts: { customerId: string; valor: number;
 }
 
 export async function buscarPrimeiraFatura(subscriptionId: string) {
-  const result = await asaasFetch(`/payments?subscription=${subscriptionId}&limit=1`) as { data: Array<{ id: string; invoiceUrl: string }> };
+  const result = await asaasFetch(`/payments?subscription=${subscriptionId}&limit=1`) as {
+    data: Array<{ id: string; invoiceUrl: string; status: string; value: number; dueDate: string }>;
+  };
   return result.data[0];
 }
 

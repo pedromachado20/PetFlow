@@ -1,9 +1,13 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, CheckCircle2, Clock } from "lucide-react";
+import { useState } from "react";
+import { CreditCard, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { toast } from "sonner";
 import { formatCurrency, hojeLocal } from "~/lib/utils";
@@ -17,11 +21,23 @@ const getAssinatura = createServerFn({ method: "GET" }).handler(async () => {
   const { tenants } = await import("~/db/schema");
   const tenant = await db.query.tenants.findFirst({
     where: eq(tenants.id, tenantId),
-    columns: { nome: true, planoSaas: true, status: true, trialEndsAt: true, asaasSubscriptionId: true },
+    columns: { nome: true, planoSaas: true, status: true, trialEndsAt: true, asaasSubscriptionId: true, cnpj: true },
   });
   const { SUBSCRIPTION_PRICE } = await import("~/lib/billing");
   return { ...tenant, preco: SUBSCRIPTION_PRICE };
 });
+
+const salvarDadosCobranca = createServerFn({ method: "POST" })
+  .validator(z.object({ cnpj: z.string().min(11, "Informe um CPF ou CNPJ válido") }))
+  .handler(async ({ data }) => {
+    const { requireTenant, requireRole, ADMIN_ROLES } = await import("~/server/context");
+    const { tenantId, userRole } = await requireTenant();
+    requireRole(userRole, ADMIN_ROLES);
+    const { db } = await import("~/db");
+    const { eq } = await import("drizzle-orm");
+    const { tenants } = await import("~/db/schema");
+    await db.update(tenants).set({ cnpj: data.cnpj, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+  });
 
 const assinarAgora = createServerFn({ method: "POST" }).handler(async () => {
   const { requireTenant, requireRole, ADMIN_ROLES } = await import("~/server/context");
@@ -36,7 +52,7 @@ const assinarAgora = createServerFn({ method: "POST" }).handler(async () => {
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
   if (!tenant) throw new Error("Pet shop não encontrado");
   if (tenant.asaasSubscriptionId) throw new Error("Já existe uma assinatura ativa");
-  if (!tenant.cnpj) throw new Error("Preencha o CPF ou CNPJ do pet shop em Configurações antes de assinar");
+  if (!tenant.cnpj) throw new Error("Preencha o CPF ou CNPJ do pet shop antes de assinar");
 
   let customerId = tenant.asaasCustomerId;
   if (!customerId) {
@@ -70,6 +86,7 @@ function AssinaturaPage() {
   const { userRole } = useRouteContext({ from: "/_app" }) as { userRole?: UserRole };
   const isAdmin = userRole === "owner" || userRole === "admin";
   const { data, isLoading } = useQuery({ queryKey: ["assinatura"], queryFn: () => getAssinatura() });
+  const [cnpjInput, setCnpjInput] = useState("");
 
   const assinarMut = useMutation({
     mutationFn: () => assinarAgora(),
@@ -83,6 +100,15 @@ function AssinaturaPage() {
       }
     },
     onError: (e: any) => toast.error(e.message ?? "Erro ao criar assinatura"),
+  });
+
+  const salvarCobrancaMut = useMutation({
+    mutationFn: () => salvarDadosCobranca({ data: { cnpj: cnpjInput.trim() } }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["assinatura"] });
+      assinarMut.mutate();
+    },
+    onError: (e: any) => toast.error(e.message ?? "Erro ao salvar dados de cobrança"),
   });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
@@ -149,7 +175,28 @@ function AssinaturaPage() {
             </div>
           )}
 
-          {!data?.asaasSubscriptionId && isAdmin && (
+          {!data?.asaasSubscriptionId && isAdmin && !data?.cnpj && (
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4">
+                <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+                <p className="text-sm">Para gerar a cobrança, precisamos do CPF ou CNPJ do pet shop (dados de cobrança exigidos pelo Asaas).</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>CPF ou CNPJ</Label>
+                <Input placeholder="00.000.000/0000-00" value={cnpjInput} onChange={(e) => setCnpjInput(e.target.value)} />
+              </div>
+              <Button
+                className="w-full"
+                disabled={salvarCobrancaMut.isPending || assinarMut.isPending || cnpjInput.trim().length < 11}
+                onClick={() => salvarCobrancaMut.mutate()}
+              >
+                <CreditCard className="h-4 w-4" />
+                {salvarCobrancaMut.isPending || assinarMut.isPending ? "Processando..." : "Salvar e assinar"}
+              </Button>
+            </div>
+          )}
+
+          {!data?.asaasSubscriptionId && isAdmin && data?.cnpj && (
             <Button className="w-full" disabled={assinarMut.isPending} onClick={() => assinarMut.mutate()}>
               <CreditCard className="h-4 w-4" />
               {assinarMut.isPending ? "Criando assinatura..." : "Quero assinar agora"}

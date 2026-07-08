@@ -27,8 +27,8 @@ const getAssinatura = createServerFn({ method: "GET" }).handler(async () => {
   return { ...tenant, preco: SUBSCRIPTION_PRICE };
 });
 
-const salvarDadosCobranca = createServerFn({ method: "POST" })
-  .validator(z.object({ cnpj: z.string().min(11, "Informe um CPF ou CNPJ válido") }))
+const assinarAgora = createServerFn({ method: "POST" })
+  .validator(z.object({ cnpj: z.string().optional() }))
   .handler(async ({ data }) => {
     const { requireTenant, requireRole, ADMIN_ROLES } = await import("~/server/context");
     const { tenantId, userRole } = await requireTenant();
@@ -36,45 +36,59 @@ const salvarDadosCobranca = createServerFn({ method: "POST" })
     const { db } = await import("~/db");
     const { eq } = await import("drizzle-orm");
     const { tenants } = await import("~/db/schema");
-    await db.update(tenants).set({ cnpj: data.cnpj, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+    const { criarCliente, criarAssinatura, buscarPrimeiraFatura } = await import("~/server/asaas");
+    const { SUBSCRIPTION_PRICE } = await import("~/lib/billing");
+
+    if (data.cnpj?.trim()) {
+      await db.update(tenants).set({ cnpj: data.cnpj.trim(), updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+    }
+
+    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
+    if (!tenant) throw new Error("Pet shop não encontrado");
+    if (tenant.asaasSubscriptionId) throw new Error("Já existe uma assinatura ativa");
+    if (!tenant.cnpj) throw new Error("Preencha o CPF ou CNPJ do pet shop antes de assinar");
+
+    let customerId = tenant.asaasCustomerId;
+    if (!customerId) {
+      const cliente = await criarCliente({ nome: tenant.nome, email: tenant.email, telefone: tenant.telefone ?? undefined, cpfCnpj: tenant.cnpj });
+      customerId = cliente.id;
+      await db.update(tenants).set({ asaasCustomerId: customerId, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+    }
+
+    const hoje = hojeLocal();
+    const assinatura = await criarAssinatura({
+      customerId,
+      valor: SUBSCRIPTION_PRICE,
+      vencimento: hoje,
+      descricao: "Assinatura PetFlow",
+    });
+
+    await db.update(tenants)
+      .set({ asaasCustomerId: customerId, asaasSubscriptionId: assinatura.id, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId));
+
+    // A fatura pode levar um instante para ficar disponível no Asaas — tenta de novo uma vez
+    let fatura = await buscarPrimeiraFatura(assinatura.id).catch(() => undefined);
+    if (!fatura?.invoiceUrl) {
+      await new Promise((r) => setTimeout(r, 1500));
+      fatura = await buscarPrimeiraFatura(assinatura.id).catch(() => undefined);
+    }
+    return { invoiceUrl: fatura?.invoiceUrl };
   });
 
-const assinarAgora = createServerFn({ method: "POST" }).handler(async () => {
-  const { requireTenant, requireRole, ADMIN_ROLES } = await import("~/server/context");
-  const { tenantId, userRole } = await requireTenant();
-  requireRole(userRole, ADMIN_ROLES);
+const getFaturaAtual = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireTenant } = await import("~/server/context");
+  const { tenantId } = await requireTenant();
   const { db } = await import("~/db");
   const { eq } = await import("drizzle-orm");
   const { tenants } = await import("~/db/schema");
-  const { criarCliente, criarAssinatura, buscarPrimeiraFatura } = await import("~/server/asaas");
-  const { SUBSCRIPTION_PRICE } = await import("~/lib/billing");
+  const { buscarPrimeiraFatura } = await import("~/server/asaas");
 
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
-  if (!tenant) throw new Error("Pet shop não encontrado");
-  if (tenant.asaasSubscriptionId) throw new Error("Já existe uma assinatura ativa");
-  if (!tenant.cnpj) throw new Error("Preencha o CPF ou CNPJ do pet shop antes de assinar");
-
-  let customerId = tenant.asaasCustomerId;
-  if (!customerId) {
-    const cliente = await criarCliente({ nome: tenant.nome, email: tenant.email, telefone: tenant.telefone ?? undefined, cpfCnpj: tenant.cnpj });
-    customerId = cliente.id;
-    await db.update(tenants).set({ asaasCustomerId: customerId, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
-  }
-
-  const hoje = hojeLocal();
-  const assinatura = await criarAssinatura({
-    customerId,
-    valor: SUBSCRIPTION_PRICE,
-    vencimento: hoje,
-    descricao: "Assinatura PetFlow",
-  });
-
-  await db.update(tenants)
-    .set({ asaasCustomerId: customerId, asaasSubscriptionId: assinatura.id, updatedAt: new Date() })
-    .where(eq(tenants.id, tenantId));
-
-  const fatura = await buscarPrimeiraFatura(assinatura.id).catch(() => undefined);
-  return { invoiceUrl: fatura?.invoiceUrl };
+  if (!tenant?.asaasSubscriptionId) throw new Error("Nenhuma assinatura encontrada");
+  const fatura = await buscarPrimeiraFatura(tenant.asaasSubscriptionId).catch(() => undefined);
+  if (!fatura?.invoiceUrl) throw new Error("Não foi possível localizar a fatura agora. Tente novamente em instantes.");
+  return { invoiceUrl: fatura.invoiceUrl };
 });
 
 export const Route = createFileRoute("/_app/assinatura/")({
@@ -87,28 +101,30 @@ function AssinaturaPage() {
   const isAdmin = userRole === "owner" || userRole === "admin";
   const { data, isLoading } = useQuery({ queryKey: ["assinatura"], queryFn: () => getAssinatura() });
   const [cnpjInput, setCnpjInput] = useState("");
+  const [invoiceUrl, setInvoiceUrl] = useState<string | undefined>();
 
   const assinarMut = useMutation({
-    mutationFn: () => assinarAgora(),
+    mutationFn: (cnpj?: string) => assinarAgora({ data: { cnpj } }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["assinatura"] });
       if (res.invoiceUrl) {
+        setInvoiceUrl(res.invoiceUrl);
         toast.success("Assinatura criada! Abrindo fatura para pagamento...");
         window.open(res.invoiceUrl, "_blank");
       } else {
-        toast.success("Assinatura criada!");
+        toast.success("Assinatura criada! Consulte a fatura no e-mail enviado pelo Asaas.");
       }
     },
     onError: (e: any) => toast.error(e.message ?? "Erro ao criar assinatura"),
   });
 
-  const salvarCobrancaMut = useMutation({
-    mutationFn: () => salvarDadosCobranca({ data: { cnpj: cnpjInput.trim() } }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["assinatura"] });
-      assinarMut.mutate();
+  const buscarFaturaMut = useMutation({
+    mutationFn: () => getFaturaAtual(),
+    onSuccess: (res) => {
+      setInvoiceUrl(res.invoiceUrl);
+      window.open(res.invoiceUrl, "_blank");
     },
-    onError: (e: any) => toast.error(e.message ?? "Erro ao salvar dados de cobrança"),
+    onError: (e: any) => toast.error(e.message ?? "Erro ao buscar fatura"),
   });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
@@ -175,6 +191,18 @@ function AssinaturaPage() {
             </div>
           )}
 
+          {data?.asaasSubscriptionId && (
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={buscarFaturaMut.isPending}
+              onClick={() => (invoiceUrl ? window.open(invoiceUrl, "_blank") : buscarFaturaMut.mutate())}
+            >
+              <CreditCard className="h-4 w-4" />
+              {buscarFaturaMut.isPending ? "Buscando fatura..." : "Abrir fatura para pagamento"}
+            </Button>
+          )}
+
           {!data?.asaasSubscriptionId && isAdmin && !data?.cnpj && (
             <div className="space-y-3">
               <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4">
@@ -187,17 +215,17 @@ function AssinaturaPage() {
               </div>
               <Button
                 className="w-full"
-                disabled={salvarCobrancaMut.isPending || assinarMut.isPending || cnpjInput.trim().length < 11}
-                onClick={() => salvarCobrancaMut.mutate()}
+                disabled={assinarMut.isPending || cnpjInput.trim().length < 11}
+                onClick={() => assinarMut.mutate(cnpjInput.trim())}
               >
                 <CreditCard className="h-4 w-4" />
-                {salvarCobrancaMut.isPending || assinarMut.isPending ? "Processando..." : "Salvar e assinar"}
+                {assinarMut.isPending ? "Processando..." : "Salvar e assinar"}
               </Button>
             </div>
           )}
 
           {!data?.asaasSubscriptionId && isAdmin && data?.cnpj && (
-            <Button className="w-full" disabled={assinarMut.isPending} onClick={() => assinarMut.mutate()}>
+            <Button className="w-full" disabled={assinarMut.isPending} onClick={() => assinarMut.mutate(undefined)}>
               <CreditCard className="h-4 w-4" />
               {assinarMut.isPending ? "Criando assinatura..." : "Quero assinar agora"}
             </Button>

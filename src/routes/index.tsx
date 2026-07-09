@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
+import { LandingPage } from "~/components/landing/landing-page";
 
 const checkAuth = createServerFn({ method: "GET" }).handler(async () => {
   const [{ getWebRequest }, { auth }] = await Promise.all([
@@ -12,10 +13,23 @@ const checkAuth = createServerFn({ method: "GET" }).handler(async () => {
   return !!session;
 });
 
+const title = "PetFlow — Gestão completa para Pet Shops e Clínicas Veterinárias";
+const description =
+  "Agenda, prontuário, vacinas, caixa e financeiro em um só sistema. 7 dias grátis, sem cartão de crédito.";
+
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
     const isAuth = await checkAuth();
-    throw redirect({ to: isAuth ? "/dashboard" : "/login" });
+    if (isAuth) throw redirect({ to: "/dashboard" });
   },
-  component: () => null,
+  head: () => ({
+    meta: [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:type", content: "website" },
+    ],
+  }),
+  component: LandingPage,
 });

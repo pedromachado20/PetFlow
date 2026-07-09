@@ -275,10 +275,10 @@ function Footer() {
           href="https://nexusteck.com.br"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-3 transition-opacity hover:opacity-80"
+          className="flex flex-col items-center gap-2 transition-opacity hover:opacity-80"
         >
           <span className="text-sm font-medium text-muted-foreground">Desenvolvido por</span>
-          <img src="/logo-nexusteck.png" alt="NexusTeck" className="h-12 w-auto" />
+          <img src="/logo-nexusteck.png" alt="NexusTeck" className="h-28 w-auto" />
         </a>
       </div>
     </footer>

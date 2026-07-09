@@ -278,7 +278,7 @@ function Footer() {
           className="flex flex-col items-center gap-2 transition-opacity hover:opacity-80"
         >
           <span className="text-sm font-medium text-muted-foreground">Desenvolvido por</span>
-          <img src="/logo-nexusteck.png" alt="NexusTeck" className="h-28 w-auto" />
+          <img src="/logo-nexusteck.png" alt="NexusTeck" className="h-56 w-auto" />
         </a>
       </div>
     </footer>

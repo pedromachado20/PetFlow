@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toast } from "sonner";
 import { formatCurrency } from "~/lib/utils";
+import { zMoedaOpcional } from "~/lib/validation";
 
 const getPlanos = createServerFn({ method: "GET" }).handler(async () => {
   const { requireTenant } = await import("~/server/context");
@@ -35,7 +36,7 @@ const salvarPlano = createServerFn({ method: "POST" })
     id: z.string().optional(),
     nome: z.string().min(1),
     tipo: z.string(),
-    preco: z.string(),
+    preco: zMoedaOpcional("0.00"),
     limite: z.coerce.number().optional(),
     descricao: z.string().optional(),
     cor: z.string().optional(),
@@ -66,9 +67,9 @@ const excluirPlano = createServerFn({ method: "POST" })
   });
 
 const schema = z.object({
-  nome: z.string().min(1),
-  tipo: z.string().min(1),
-  preco: z.string(),
+  nome: z.string().min(1, "Nome obrigatório"),
+  tipo: z.string().min(1, "Tipo obrigatório"),
+  preco: zMoedaOpcional("0.00"),
   limite: z.coerce.number().optional(),
   descricao: z.string().optional(),
   cor: z.string().optional(),
@@ -92,7 +93,7 @@ function PlanosPage() {
     queryFn: () => getPlanos(),
   });
 
-  const { register, handleSubmit, setValue, watch, reset } = useForm({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({ resolver: zodResolver(schema) });
   const tipoWatch = watch("tipo");
 
   function abrirNovo() {
@@ -154,11 +155,12 @@ function PlanosPage() {
             <div className="space-y-1.5">
               <Label>Nome *</Label>
               <Input {...register("nome")} placeholder="Ex: Plano Banho Mensal" />
+              {errors.nome && <p className="text-xs text-destructive">{errors.nome.message}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Tipo *</Label>
-                <Select value={tipoSel} onValueChange={(v) => { setTipoSel(v); setValue("tipo", v); }}>
+                <Select value={tipoSel} onValueChange={(v) => { setTipoSel(v); setValue("tipo", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ilimitado">Ilimitado</SelectItem>
@@ -166,6 +168,7 @@ function PlanosPage() {
                     <SelectItem value="premium">Premium</SelectItem>
                   </SelectContent>
                 </Select>
+                {errors.tipo && <p className="text-xs text-destructive">{errors.tipo.message}</p>}
               </div>
               {(tipoSel === "limitado" || tipoWatch === "limitado") && (
                 <div className="space-y-1.5">
@@ -177,7 +180,8 @@ function PlanosPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Preço Mensal (R$)</Label>
-                <Input {...register("preco")} placeholder="0.00" />
+                <Input {...register("preco")} placeholder="0,00" />
+                {errors.preco && <p className="text-xs text-destructive">{errors.preco.message}</p>}
               </div>
               <div className="space-y-1.5">
                 <Label>Cor</Label>

@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { ImageUpload } from "~/components/ui/image-upload";
 import { toast } from "sonner";
 import { formatCurrency } from "~/lib/utils";
+import { zMoeda } from "~/lib/validation";
 
 /* ── server functions ─────────────────────────────────────────────────── */
 
@@ -37,7 +38,7 @@ const salvarProduto = createServerFn({ method: "POST" })
     id: z.string().optional(),
     nome: z.string().min(1),
     categoria: z.string().min(1),
-    preco: z.string(),
+    preco: zMoeda("Preço obrigatório"),
     fotoUrl: z.string().optional(),
   }))
   .handler(async ({ data }) => {
@@ -79,7 +80,7 @@ const categorias = [
 const schema = z.object({
   nome: z.string().min(1, "Nome obrigatório"),
   categoria: z.string().min(1, "Categoria obrigatória"),
-  preco: z.string().min(1, "Preço obrigatório"),
+  preco: zMoeda("Preço obrigatório"),
 });
 
 type Produto = Awaited<ReturnType<typeof getProdutos>>[number];
@@ -184,7 +185,7 @@ function ProdutosPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Categoria *</Label>
-              <Select value={catSel} onValueChange={(v) => { setCatSel(v); setValue("categoria", v); }}>
+              <Select value={catSel} onValueChange={(v) => { setCatSel(v); setValue("categoria", v, { shouldValidate: true }); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {categorias.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
@@ -194,7 +195,7 @@ function ProdutosPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Preço (R$) *</Label>
-              <Input {...register("preco")} placeholder="0.00" />
+              <Input {...register("preco")} placeholder="0,00" />
               {errors.preco && <p className="text-xs text-destructive">{errors.preco.message}</p>}
             </div>
             <Button type="submit" className="w-full" disabled={salvar.isPending}>

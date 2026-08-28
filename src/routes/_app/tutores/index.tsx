@@ -60,9 +60,10 @@ const excluirTutor = createServerFn({ method: "POST" })
     const { requireTenant } = await import("~/server/context");
     const { db } = await import("~/db");
     const { tenantId } = await requireTenant();
-    const { tutores } = await import("~/db/schema");
+    const { tutores, pets } = await import("~/db/schema");
     const { eq, and } = await import("drizzle-orm");
     await db.update(tutores).set({ ativo: false }).where(and(eq(tutores.id, data.id), eq(tutores.tenantId, tenantId)));
+    await db.update(pets).set({ ativo: false }).where(and(eq(pets.tutorId, data.id), eq(pets.tenantId, tenantId)));
   });
 
 const schema = z.object({

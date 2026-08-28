@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toast } from "sonner";
 import { formatCurrency } from "~/lib/utils";
+import { zMoedaOpcional } from "~/lib/validation";
 
 const getServicos = createServerFn({ method: "GET" }).handler(async () => {
   const { requireTenant } = await import("~/server/context");
@@ -34,7 +35,7 @@ const salvarServico = createServerFn({ method: "POST" })
     id: z.string().optional(),
     nome: z.string().min(1),
     categoria: z.string(),
-    preco: z.string(),
+    preco: zMoedaOpcional("0.00"),
     duracao: z.number(),
     descricao: z.string().optional(),
   }))
@@ -64,8 +65,8 @@ const excluirServico = createServerFn({ method: "POST" })
 
 const schema = z.object({
   nome: z.string().min(1, "Nome obrigatório"),
-  categoria: z.string().min(1),
-  preco: z.string(),
+  categoria: z.string().min(1, "Categoria obrigatória"),
+  preco: zMoedaOpcional("0.00"),
   duracao: z.coerce.number().min(1),
   descricao: z.string().optional(),
 });
@@ -167,21 +168,22 @@ function ServicosPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Categoria *</Label>
-              <Select value={catSel} onValueChange={(v) => { setCatSel(v); setValue("categoria", v); }}>
+              <Select value={catSel} onValueChange={(v) => { setCatSel(v); setValue("categoria", v, { shouldValidate: true }); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {categorias.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {errors.categoria && <p className="text-xs text-destructive">{errors.categoria.message}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Preço (R$)</Label>
-                <Input {...register("preco")} placeholder="50.00" />
+                <Input {...register("preco")} placeholder="50,00" />
               </div>
               <div className="space-y-1.5">
                 <Label>Duração (min)</Label>
-                <Input type="number" {...register("duracao")} />
+                <Input type="number" {...register("duracao")} onFocus={(e) => e.target.select()} />
               </div>
             </div>
             <div className="space-y-1.5">

@@ -240,7 +240,7 @@ function AssinaturaPage() {
             </div>
           )}
 
-          {!data?.asaasSubscriptionId && isAdmin && !data?.cnpj && (
+          {data?.status !== "ativo" && !data?.asaasSubscriptionId && isAdmin && !data?.cnpj && (
             <div className="space-y-3">
               <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4">
                 <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
@@ -261,13 +261,13 @@ function AssinaturaPage() {
             </div>
           )}
 
-          {!data?.asaasSubscriptionId && isAdmin && data?.cnpj && (
+          {data?.status !== "ativo" && !data?.asaasSubscriptionId && isAdmin && data?.cnpj && (
             <Button className="w-full" disabled={assinarMut.isPending} onClick={() => assinarMut.mutate(undefined)}>
               <CreditCard className="h-4 w-4" />
               {assinarMut.isPending ? "Criando assinatura..." : "Quero assinar agora"}
             </Button>
           )}
-          {!data?.asaasSubscriptionId && !isAdmin && (
+          {data?.status !== "ativo" && !data?.asaasSubscriptionId && !isAdmin && (
             <p className="text-sm text-muted-foreground text-center">Fale com o administrador do pet shop para assinar o plano.</p>
           )}
         </CardContent>

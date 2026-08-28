@@ -14,12 +14,15 @@ const pageTitles: Record<string, string> = {
   "/caixa": "Caixa",
   "/tutores": "Tutores",
   "/pets": "Pets",
+  "/produtos": "Produtos",
   "/servicos": "Serviços",
   "/profissionais": "Profissionais",
   "/planos": "Planos",
   "/financeiro": "Financeiro",
   "/relatorios": "Relatórios",
+  "/assinatura": "Assinatura",
   "/configuracoes": "Configurações",
+  "/ajuda": "Ajuda",
 };
 
 export function AppHeader() {

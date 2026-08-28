@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/start";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, PawPrint, Users, DollarSign, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { formatCurrency } from "~/lib/utils";
+import { formatCurrency, hojeLocal } from "~/lib/utils";
 
 const getDashboardData = createServerFn({ method: "GET" }).handler(async () => {
   const { requireTenant } = await import("~/server/context");
@@ -12,8 +12,8 @@ const getDashboardData = createServerFn({ method: "GET" }).handler(async () => {
   const { eq, and, gte, sql, count } = await import("drizzle-orm");
   const { appointments, pets, tutores, transacoes } = await import("~/db/schema");
 
-  const hoje = new Date().toISOString().slice(0, 10);
-  const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+  const hoje = hojeLocal();
+  const inicioMes = hoje.slice(0, 7) + "-01";
 
   const [totalPets, totalTutores, agendamentosHoje, receitaMes] = await Promise.all([
     db.select({ count: count() }).from(pets).where(and(eq(pets.tenantId, tenantId), eq(pets.ativo, true))),

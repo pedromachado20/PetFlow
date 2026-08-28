@@ -59,7 +59,7 @@ function RootDocument({ children }: { children: ReactNode }) {
       </head>
       <body className="bg-background text-foreground antialiased">
         {children}
-        <Toaster richColors position="top-right" />
+        <Toaster richColors position="top-right" offset={72} />
         <ScrollRestoration />
         <Scripts />
       </body>

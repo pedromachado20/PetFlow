@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Label } from "~/components/ui/label";
 import { toast } from "sonner";
-import { formatCurrency } from "~/lib/utils";
+import { formatCurrency, hojeLocal } from "~/lib/utils";
 import { printCupom, printRecibo } from "~/lib/pdf";
 
 /* ── server functions ─────────────────────────────────────────────────── */
@@ -194,6 +194,15 @@ const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
       if (data.servicos.some((s) => !idsValidos.has(s.serviceId))) throw new Error("Serviço não encontrado");
     }
 
+    // Se já existe um pagamento de caixa para este tutor neste dia, bloqueia (evita cobrança duplicada)
+    if (finalTutorId) {
+      const refKeyExistente = `caixa-${finalTutorId}-${data.data}`;
+      const jaPago = await db.query.transacoes.findFirst({
+        where: and(eq(transacoes.tenantId, tenantId), eq(transacoes.referencia, refKeyExistente)),
+      });
+      if (jaPago) throw new Error("Pagamento já registrado");
+    }
+
     // Criar tutor novo se necessário
     if (!finalTutorId && data.novoNomeTutor?.trim()) {
       const newId = crypto.randomUUID();
@@ -265,7 +274,7 @@ const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
       status: "pago",
       data: data.data,
       pago: true,
-      referencia: `avulso-${crypto.randomUUID()}`,
+      referencia: finalTutorId ? `caixa-${finalTutorId}-${data.data}` : `avulso-${crypto.randomUUID()}`,
     });
   });
 
@@ -658,7 +667,7 @@ function AtendimentoAvulsoDialog({
               <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(subServicos + subExtras + subProdutos)}</span></div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Desconto (R$)</span>
-                <input type="number" min="0" step="0.01" value={desconto} onChange={(e) => setDesconto(e.target.value)}
+                <input type="number" min="0" step="0.01" value={desconto} onChange={(e) => setDesconto(e.target.value)} onFocus={(e) => e.target.select()}
                   className="w-24 text-right border border-border rounded px-2 py-1 text-sm bg-background" />
               </div>
             </div>
@@ -704,7 +713,7 @@ export const Route = createFileRoute("/_app/caixa/")({
 
 function CaixaPage() {
   const qc = useQueryClient();
-  const [dataAtual, setDataAtual] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dataAtual, setDataAtual] = useState(hojeLocal);
   const [busca, setBusca] = useState("");
   const [selecionado, setSelecionado] = useState<Grupo | null>(null);
   const [desconto, setDesconto] = useState("0");
@@ -838,7 +847,7 @@ function CaixaPage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" className="h-7 text-xs px-2"
-              onClick={() => { setDataAtual(new Date().toISOString().slice(0, 10)); setSelecionado(null); setCarrinho([]); }}>
+              onClick={() => { setDataAtual(hojeLocal()); setSelecionado(null); setCarrinho([]); }}>
               Hoje
             </Button>
           </div>

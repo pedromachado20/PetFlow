@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Printer } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Printer, Trash2 } from "lucide-react";
 import { printFinanceiro } from "~/lib/pdf";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -15,7 +15,8 @@ import { Badge } from "~/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "~/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toast } from "sonner";
-import { formatCurrency } from "~/lib/utils";
+import { formatCurrency, hojeLocal } from "~/lib/utils";
+import { zMoedaOpcional } from "~/lib/validation";
 
 const getFinanceiro = createServerFn({ method: "GET" }).handler(async () => {
   const { requireTenant } = await import("~/server/context");
@@ -24,7 +25,7 @@ const getFinanceiro = createServerFn({ method: "GET" }).handler(async () => {
   const { eq, and, gte, sql } = await import("drizzle-orm");
   const { transacoes } = await import("~/db/schema");
 
-  const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+  const inicioMes = hojeLocal().slice(0, 7) + "-01";
 
   const [receitas, despesas, lista] = await Promise.all([
     db.select({ total: sql<string>`coalesce(sum(valor), 0)` }).from(transacoes).where(and(eq(transacoes.tenantId, tenantId), eq(transacoes.tipo, "receita"), gte(transacoes.data, inicioMes))),
@@ -46,7 +47,7 @@ const criarTransacao = createServerFn({ method: "POST" })
     tipo: z.enum(["receita", "despesa"]),
     categoria: z.string().min(1),
     descricao: z.string().min(1),
-    valor: z.string(),
+    valor: zMoedaOpcional("0.00"),
     data: z.string(),
   }))
   .handler(async ({ data }) => {
@@ -64,11 +65,22 @@ const criarTransacao = createServerFn({ method: "POST" })
     });
   });
 
+const excluirTransacao = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.string() }))
+  .handler(async ({ data }) => {
+    const { requireTenant } = await import("~/server/context");
+    const { db } = await import("~/db");
+    const { tenantId } = await requireTenant();
+    const { transacoes } = await import("~/db/schema");
+    const { eq, and } = await import("drizzle-orm");
+    await db.delete(transacoes).where(and(eq(transacoes.id, data.id), eq(transacoes.tenantId, tenantId)));
+  });
+
 const schema = z.object({
-  tipo: z.enum(["receita", "despesa"]),
-  categoria: z.string().min(1),
-  descricao: z.string().min(1),
-  valor: z.string(),
+  tipo: z.enum(["receita", "despesa"], { errorMap: () => ({ message: "Tipo obrigatório" }) }),
+  categoria: z.string().min(1, "Categoria obrigatória"),
+  descricao: z.string().min(1, "Descrição obrigatória"),
+  valor: zMoedaOpcional("0.00"),
   data: z.string(),
 });
 
@@ -82,19 +94,26 @@ export const Route = createFileRoute("/_app/financeiro/")({
 function FinanceiroPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [excluindo, setExcluindo] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["financeiro"],
     queryFn: () => getFinanceiro(),
   });
 
-  const { register, handleSubmit, setValue, watch, reset } = useForm({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({ resolver: zodResolver(schema) });
   const tipoWatch = watch("tipo");
 
   const criar = useMutation({
     mutationFn: (values: z.infer<typeof schema>) => criarTransacao({ data: values }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["financeiro"] }); toast.success("Lançamento salvo"); setOpen(false); reset(); },
     onError: () => toast.error("Erro ao salvar lançamento"),
+  });
+
+  const excluir = useMutation({
+    mutationFn: (id: string) => excluirTransacao({ data: { id } }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["financeiro"] }); toast.success("Lançamento removido"); setExcluindo(null); },
+    onError: () => toast.error("Erro ao remover lançamento"),
   });
 
   const nomeMes = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -145,14 +164,14 @@ function FinanceiroPage() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() => imprimir("receita")}
             className="text-green-700 border-green-300 hover:bg-green-50">
-            <Printer className="h-4 w-4" /> Receitas
+            <Printer className="h-4 w-4" /> PDF Receitas
           </Button>
           <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() => imprimir("despesa")}
             className="text-red-700 border-red-300 hover:bg-red-50">
-            <Printer className="h-4 w-4" /> Despesas
+            <Printer className="h-4 w-4" /> PDF Despesas
           </Button>
           <Button variant="outline" size="sm" disabled={!data?.transacoes.length} onClick={() => imprimir("ambos")}>
-            <Printer className="h-4 w-4" /> Completo
+            <Printer className="h-4 w-4" /> PDF Completo
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -163,17 +182,18 @@ function FinanceiroPage() {
             <form onSubmit={handleSubmit((v) => criar.mutate(v))} className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Tipo *</Label>
-                <Select onValueChange={(v) => { setValue("tipo", v as any); setValue("categoria", ""); }}>
+                <Select onValueChange={(v) => { setValue("tipo", v as any, { shouldValidate: true }); setValue("categoria", ""); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="receita">Receita</SelectItem>
                     <SelectItem value="despesa">Despesa</SelectItem>
                   </SelectContent>
                 </Select>
+                {errors.tipo && <p className="text-xs text-destructive">{errors.tipo.message}</p>}
               </div>
               <div className="space-y-1.5">
                 <Label>Categoria *</Label>
-                <Select onValueChange={(v) => setValue("categoria", v)}>
+                <Select onValueChange={(v) => setValue("categoria", v, { shouldValidate: true })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {(tipoWatch === "receita" ? categoriasReceita : categoriasDespesa).map((c) => (
@@ -181,19 +201,22 @@ function FinanceiroPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.categoria && <p className="text-xs text-destructive">{errors.categoria.message}</p>}
               </div>
               <div className="space-y-1.5">
                 <Label>Descrição *</Label>
                 <Input {...register("descricao")} />
+                {errors.descricao && <p className="text-xs text-destructive">{errors.descricao.message}</p>}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Valor (R$)</Label>
-                  <Input {...register("valor")} placeholder="0.00" />
+                  <Input {...register("valor")} placeholder="0,00" />
+                  {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Data</Label>
-                  <Input type="date" {...register("data")} defaultValue={new Date().toISOString().slice(0, 10)} />
+                  <Input type="date" {...register("data")} defaultValue={hojeLocal()} />
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={criar.isPending}>
@@ -218,14 +241,32 @@ function FinanceiroPage() {
                   <p className="font-medium text-sm">{t.descricao}</p>
                   <p className="text-xs text-muted-foreground">{t.categoria} · {t.data}</p>
                 </div>
-                <p className={`font-bold ${t.tipo === "receita" ? "text-success" : "text-destructive"}`}>
-                  {t.tipo === "receita" ? "+" : "-"}{formatCurrency(t.valor)}
-                </p>
+                <div className="flex items-center gap-3">
+                  <p className={`font-bold ${t.tipo === "receita" ? "text-success" : "text-destructive"}`}>
+                    {t.tipo === "receita" ? "+" : "-"}{formatCurrency(t.valor)}
+                  </p>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setExcluindo(t.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={!!excluindo} onOpenChange={(o) => !o && setExcluindo(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Remover lançamento?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Esta ação é irreversível.</p>
+          <div className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setExcluindo(null)}>Cancelar</Button>
+            <Button variant="destructive" className="flex-1" disabled={excluir.isPending} onClick={() => excluir.mutate(excluindo!)}>
+              {excluir.isPending ? "Removendo..." : "Remover"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

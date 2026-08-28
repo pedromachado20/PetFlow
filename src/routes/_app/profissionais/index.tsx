@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { ImageUpload } from "~/components/ui/image-upload";
 import { toast } from "sonner";
 import { formatPhone } from "~/lib/utils";
+import { zMoedaOpcional } from "~/lib/validation";
 
 const getProfissionais = createServerFn({ method: "GET" }).handler(async () => {
   const { requireTenant } = await import("~/server/context");
@@ -38,7 +39,7 @@ const salvarProfissional = createServerFn({ method: "POST" })
     telefone: z.string().optional(),
     email: z.string().optional(),
     crmv: z.string().optional(),
-    comissao: z.string().optional(),
+    comissao: zMoedaOpcional(),
     fotoUrl: z.string().optional(),
   }))
   .handler(async ({ data }) => {
@@ -177,7 +178,7 @@ function ProfissionaisPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Especialidade *</Label>
-              <Select value={espSel} onValueChange={(v) => { setEspSel(v); setValue("especialidade", v); }}>
+              <Select value={espSel} onValueChange={(v) => { setEspSel(v); setValue("especialidade", v, { shouldValidate: true }); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {especialidades.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}

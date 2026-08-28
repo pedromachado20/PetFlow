@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { Switch } from "~/components/ui/switch";
 import { ImageUpload } from "~/components/ui/image-upload";
 import { toast } from "sonner";
-import { especieLabel, calcularIdadePet } from "~/lib/utils";
+import { especieLabel, calcularIdadePet, hojeLocal } from "~/lib/utils";
 
 // ─── Server functions ──────────────────────────────────────────────────────────
 
@@ -429,7 +429,7 @@ function TabDados({
           <form onSubmit={handleSubmit((v) => salvar.mutate(v))} className="space-y-3">
             <div className="space-y-1.5">
               <Label>Tutor *</Label>
-              <Select value={tutorSel} onValueChange={(v) => { setTutorSel(v); setValue("tutorId", v); }}>
+              <Select value={tutorSel} onValueChange={(v) => { setTutorSel(v); setValue("tutorId", v, { shouldValidate: true }); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione o tutor" /></SelectTrigger>
                 <SelectContent>
                   {tutores.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
@@ -444,7 +444,7 @@ function TabDados({
               </div>
               <div className="space-y-1.5">
                 <Label>Espécie *</Label>
-                <Select value={especieSel} onValueChange={(v) => { setEspecieSel(v); setValue("especie", v); }}>
+                <Select value={especieSel} onValueChange={(v) => { setEspecieSel(v); setValue("especie", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {["cachorro", "gato", "passaro", "peixe", "hamster", "coelho", "reptil", "outro"].map((e) => (
@@ -461,7 +461,7 @@ function TabDados({
               </div>
               <div className="space-y-1.5">
                 <Label>Sexo *</Label>
-                <Select value={sexoSel} onValueChange={(v) => { setSexoSel(v); setValue("sexo", v); }}>
+                <Select value={sexoSel} onValueChange={(v) => { setSexoSel(v); setValue("sexo", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="macho">Macho</SelectItem>
@@ -474,7 +474,7 @@ function TabDados({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Porte *</Label>
-                <Select value={porteSel} onValueChange={(v) => { setPorteSel(v); setValue("porte", v); }}>
+                <Select value={porteSel} onValueChange={(v) => { setPorteSel(v); setValue("porte", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {["mini", "pequeno", "medio", "grande", "gigante"].map((p) => (
@@ -550,7 +550,7 @@ function TabProntuarios({
   function abrirNovo() {
     setEditando(null);
     setProfSel("");
-    reset({ dataConsulta: new Date().toISOString().split("T")[0], profissionalId: "", queixa: "", diagnostico: "", prescricao: "", peso: "", temperatura: "", retorno: "", observacoes: "" });
+    reset({ dataConsulta: hojeLocal(), profissionalId: "", queixa: "", diagnostico: "", prescricao: "", peso: "", temperatura: "", retorno: "", observacoes: "" });
     setOpen(true);
   }
 
@@ -668,7 +668,7 @@ function TabProntuarios({
               </div>
               <div className="space-y-1.5">
                 <Label>Veterinário</Label>
-                <Select value={profSel} onValueChange={(v) => { setProfSel(v); setValue("profissionalId", v); }}>
+                <Select value={profSel} onValueChange={(v) => { setProfSel(v); setValue("profissionalId", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {profissionais.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
@@ -775,7 +775,7 @@ function TabVacinas({
   function abrirNova() {
     setEditando(null);
     setProfSel("");
-    reset({ tipo: "", profissionalId: "", fabricante: "", lote: "", dataAplicacao: new Date().toISOString().split("T")[0], proximaDose: "", observacoes: "" });
+    reset({ tipo: "", profissionalId: "", fabricante: "", lote: "", dataAplicacao: hojeLocal(), proximaDose: "", observacoes: "" });
     setOpen(true);
   }
 
@@ -808,7 +808,7 @@ function TabVacinas({
     onError: () => toast.error("Erro ao remover vacina"),
   });
 
-  const hoje = new Date().toISOString().split("T")[0] ?? "";
+  const hoje = hojeLocal();
 
   return (
     <>
@@ -868,7 +868,7 @@ function TabVacinas({
             </div>
             <div className="space-y-1.5">
               <Label>Veterinário</Label>
-              <Select value={profSel} onValueChange={(v) => { setProfSel(v); setValue("profissionalId", v); }}>
+              <Select value={profSel} onValueChange={(v) => { setProfSel(v); setValue("profissionalId", v, { shouldValidate: true }); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
                 <SelectContent>
                   {profissionais.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}

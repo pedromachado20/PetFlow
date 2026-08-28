@@ -439,12 +439,14 @@ function AgendaPage() {
                 const selecionado = dstr === diaSelecionado;
                 const doDia = agendamentosPorDia[dstr] ?? [];
                 return (
-                  <button
+                  <div
                     key={dstr}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setDiaSelecionado(dstr)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDiaSelecionado(dstr); } }}
                     className={cn(
-                      "h-24 border-r border-b p-1.5 flex flex-col gap-1 text-left hover:bg-secondary/60 transition-colors",
+                      "h-24 border-r border-b p-1.5 flex flex-col gap-1 text-left hover:bg-secondary/60 transition-colors cursor-pointer",
                       !noMes && "text-muted-foreground",
                       selecionado && "bg-accent ring-1 ring-inset ring-primary"
                     )}
@@ -457,15 +459,20 @@ function AgendaPage() {
                     </span>
                     <div className="flex flex-col gap-0.5 overflow-hidden">
                       {doDia.slice(0, 3).map((a) => (
-                        <span key={a.id} className={cn("rounded px-1 py-0.5 text-[10px] font-semibold leading-tight truncate", statusChipClass[a.status])}>
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDetalhe(a); }}
+                          className={cn("rounded px-1 py-0.5 text-[10px] font-semibold leading-tight truncate text-left hover:brightness-110", statusChipClass[a.status])}
+                        >
                           {a.horaInicio} {a.pet?.nome}
-                        </span>
+                        </button>
                       ))}
                       {doDia.length > 3 && (
                         <span className="text-[10px] font-medium text-muted-foreground px-1">+{doDia.length - 3} mais</span>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

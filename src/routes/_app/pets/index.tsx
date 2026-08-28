@@ -220,7 +220,7 @@ function PetsPage() {
           <form onSubmit={handleSubmit((v) => salvar.mutate(v))} className="space-y-3">
             <div className="space-y-1.5">
               <Label>Tutor *</Label>
-              <Select value={tutorSel} onValueChange={(v) => { setTutorSel(v); setValue("tutorId", v); }}>
+              <Select value={tutorSel} onValueChange={(v) => { setTutorSel(v); setValue("tutorId", v, { shouldValidate: true }); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione o tutor" /></SelectTrigger>
                 <SelectContent>
                   {data?.tutores.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
@@ -235,7 +235,7 @@ function PetsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Espécie *</Label>
-                <Select value={especieSel} onValueChange={(v) => { setEspecieSel(v); setValue("especie", v); }}>
+                <Select value={especieSel} onValueChange={(v) => { setEspecieSel(v); setValue("especie", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {["cachorro", "gato", "passaro", "peixe", "hamster", "coelho", "reptil", "outro"].map((e) => (
@@ -252,7 +252,7 @@ function PetsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Sexo *</Label>
-                <Select value={sexoSel} onValueChange={(v) => { setSexoSel(v); setValue("sexo", v); }}>
+                <Select value={sexoSel} onValueChange={(v) => { setSexoSel(v); setValue("sexo", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="macho">Macho</SelectItem>
@@ -265,7 +265,7 @@ function PetsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Porte *</Label>
-                <Select value={porteSel} onValueChange={(v) => { setPorteSel(v); setValue("porte", v); }}>
+                <Select value={porteSel} onValueChange={(v) => { setPorteSel(v); setValue("porte", v, { shouldValidate: true }); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="mini">Mini</SelectItem>

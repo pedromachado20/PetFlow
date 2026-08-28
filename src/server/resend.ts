@@ -35,3 +35,19 @@ export function emailTrialAcabando(nomePetShop: string) {
     </div>
   `;
 }
+
+export function emailPagamentoAtrasado(nomePetShop: string) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1f2937;">
+      <h2 style="color: #dc2626;">Pagamento do PetFlow em atraso — acesso suspenso</h2>
+      <p>Olá, ${nomePetShop}!</p>
+      <p>Identificamos que o pagamento da sua assinatura do PetFlow está pendente. Por isso, o acesso ao sistema foi <strong>temporariamente suspenso</strong> até a regularização.</p>
+      <p>Para voltar a usar a agenda, caixa, financeiro e demais módulos, acesse a página de Assinatura e regularize o pagamento.</p>
+      <p style="margin-top: 24px;">
+        <a href="https://petflow.nexusteck.com.br/assinatura" style="background:#7c3aed;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Regularizar assinatura</a>
+      </p>
+      <p style="margin-top: 24px; font-size: 12px; color: #6b7280;">Seus dados continuam guardados normalmente durante a suspensão.</p>
+      <p style="margin-top: 16px; font-size: 12px; color: #6b7280;">Dúvidas? Fale com a gente: nexusteckbr@gmail.com ou WhatsApp (21) 9.9984-0779.</p>
+    </div>
+  `;
+}

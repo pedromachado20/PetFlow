@@ -1,6 +1,19 @@
 /// <reference types="vinxi/types/server" />
 import { createStartAPIHandler } from "@tanstack/start-api-routes";
 
+async function avisarPagamentoAtrasado(email: string, nome: string): Promise<void> {
+  try {
+    const { enviarEmail, emailPagamentoAtrasado } = await import("~/server/resend");
+    await enviarEmail({
+      to: email,
+      subject: "Pagamento do PetFlow em atraso — acesso suspenso",
+      html: emailPagamentoAtrasado(nome),
+    });
+  } catch (err) {
+    console.error(`Falha ao enviar aviso de pagamento atrasado para ${email}:`, err);
+  }
+}
+
 async function handleAsaasWebhook(request: Request): Promise<Response> {
   const token = request.headers.get("asaas-access-token");
   if (!process.env.ASAAS_WEBHOOK_TOKEN || token !== process.env.ASAAS_WEBHOOK_TOKEN) {
@@ -24,9 +37,11 @@ async function handleAsaasWebhook(request: Request): Promise<Response> {
     const { db } = await import("~/db");
     const { eq } = await import("drizzle-orm");
     const { tenants } = await import("~/db/schema");
+    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.asaasSubscriptionId, subscriptionId) });
     await db.update(tenants)
       .set({ status: "suspenso", updatedAt: new Date() })
       .where(eq(tenants.asaasSubscriptionId, subscriptionId));
+    if (tenant) await avisarPagamentoAtrasado(tenant.email, tenant.nome);
   }
 
   if (subscriptionId && (body?.event === "PAYMENT_DELETED" || body?.event === "PAYMENT_REFUNDED")) {
@@ -34,9 +49,11 @@ async function handleAsaasWebhook(request: Request): Promise<Response> {
     const { db } = await import("~/db");
     const { eq } = await import("drizzle-orm");
     const { tenants } = await import("~/db/schema");
+    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.asaasSubscriptionId, subscriptionId) });
     await db.update(tenants)
       .set({ status: "suspenso", asaasSubscriptionId: null, updatedAt: new Date() })
       .where(eq(tenants.asaasSubscriptionId, subscriptionId));
+    if (tenant) await avisarPagamentoAtrasado(tenant.email, tenant.nome);
   }
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });

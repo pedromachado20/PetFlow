@@ -23,10 +23,10 @@ const checkSession = createServerFn({ method: "GET" }).handler(async () => {
   });
 
   if (!user?.tenantId) {
-    throw redirect({ to: "/onboarding" });
+    return { status: "redirect", redirectTo: "/onboarding" } as const;
   }
   if (!user.ativo) {
-    throw redirect({ to: "/login" });
+    return { status: "redirect", redirectTo: "/login" } as const;
   }
 
   const tenant = await db.query.tenants.findFirst({
@@ -38,17 +38,22 @@ const checkSession = createServerFn({ method: "GET" }).handler(async () => {
   const bloqueado = tenant?.status === "suspenso" || (trialExpirado && !tenant?.asaasSubscriptionId);
 
   return {
+    status: "ok",
     session,
     tenantNome: tenant?.nome ?? "",
     userRole: user.role ?? "atendente",
     bloqueado,
-  };
+  } as const;
 });
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async ({ location }) => {
+    // O redirect precisa acontecer aqui no beforeLoad, nunca dentro do handler
+    // do createServerFn: lançar redirect() dentro de uma server function trava
+    // a hidratação com "Invariant failed" em navegação direta/F5.
     const data = await checkSession();
     if (!data) throw redirect({ to: "/login" });
+    if (data.status === "redirect") throw redirect({ to: data.redirectTo });
     if (data.bloqueado && location.pathname !== "/assinatura") {
       throw redirect({ to: "/assinatura" });
     }

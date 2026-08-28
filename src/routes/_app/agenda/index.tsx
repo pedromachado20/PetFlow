@@ -12,7 +12,7 @@ import { Badge } from "~/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toast } from "sonner";
-import { cn, formatCurrency } from "~/lib/utils";
+import { cn, formatCurrency, hojeLocal } from "~/lib/utils";
 import { printTable } from "~/lib/pdf";
 
 const getAgenda = createServerFn({ method: "GET" })
@@ -154,9 +154,13 @@ function AgendaPage() {
   const [editando, setEditando] = useState<Agendamento | null>(null);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<Agendamento | null>(null);
-  const hoje = fmtData(new Date());
+  const hoje = hojeLocal();
   const [diaSelecionado, setDiaSelecionado] = useState(hoje);
   const [visao, setVisao] = useState<"mes" | "dia">("mes");
+  const [mesRef, setMesRef] = useState(() => {
+    const { ano, mes } = partesData(hoje);
+    return { ano, mes };
+  });
 
   const [petSel, setPetSel] = useState("");
   const [proSel, setProSel] = useState("");
@@ -166,9 +170,10 @@ function AgendaPage() {
   const [horaFimSel, setHoraFimSel] = useState("");
   const [obsVal, setObsVal] = useState("");
 
-  const { ano, mes } = partesData(diaSelecionado);
-  const inicioMes = `${ano}-${pad2(mes + 1)}-01`;
-  const fimMes = fmtData(new Date(ano, mes + 1, 0));
+  const { ano, mes } = mesRef;
+  const celulasDoMes = montarCelulasDoMes(ano, mes);
+  const inicioMes = fmtData(celulasDoMes[0]!);
+  const fimMes = fmtData(celulasDoMes[41]!);
 
   const { data, isLoading } = useQuery({
     queryKey: ["agenda", ano, mes],
@@ -232,18 +237,23 @@ function AgendaPage() {
     const d = new Date(diaSelecionado + "T00:00:00");
     d.setDate(d.getDate() + delta);
     setDiaSelecionado(fmtData(d));
+    setMesRef({ ano: d.getFullYear(), mes: d.getMonth() });
   }
 
   function mudarMes(delta: number) {
-    setDiaSelecionado(fmtData(new Date(ano, mes + delta, 1)));
+    const d = new Date(ano, mes + delta, 1);
+    setDiaSelecionado(fmtData(d));
+    setMesRef({ ano: d.getFullYear(), mes: d.getMonth() });
   }
 
   function selecionarMes(novoMes: number) {
     setDiaSelecionado(fmtData(new Date(ano, novoMes, 1)));
+    setMesRef({ ano, mes: novoMes });
   }
 
   function selecionarAno(novoAno: number) {
     setDiaSelecionado(fmtData(new Date(novoAno, mes, 1)));
+    setMesRef({ ano: novoAno, mes });
   }
 
   function handlePrint() {
@@ -265,7 +275,6 @@ function AgendaPage() {
   }
 
   const anosDisponiveis = Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i);
-  const celulasDoMes = montarCelulasDoMes(ano, mes);
 
   return (
     <div className="space-y-4">
@@ -293,7 +302,7 @@ function AgendaPage() {
           </div>
         )}
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="ghost" size="sm" onClick={() => setDiaSelecionado(hoje)}>Hoje</Button>
+          <Button variant="ghost" size="sm" onClick={() => { setDiaSelecionado(hoje); setMesRef(partesData(hoje)); }}>Hoje</Button>
           <div className="flex items-center gap-1 rounded-lg border bg-secondary p-1">
             <Button variant={visao === "mes" ? "default" : "ghost"} size="sm" className="h-7" onClick={() => setVisao("mes")}>Mês</Button>
             <Button variant={visao === "dia" ? "default" : "ghost"} size="sm" className="h-7" onClick={() => setVisao("dia")}>Dia</Button>

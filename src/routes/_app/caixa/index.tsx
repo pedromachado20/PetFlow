@@ -101,18 +101,23 @@ const registrarPagamento = createServerFn({ method: "POST" })
     });
     if (existing) throw new Error("Pagamento já registrado");
 
-    await db.insert(transacoes).values({
-      id: crypto.randomUUID(),
-      tenantId,
-      tipo: "receita",
-      categoria: data.formaPagamento,
-      descricao: data.descricao,
-      valor: data.valor.toFixed(2),
-      status: "pago",
-      data: data.data,
-      pago: true,
-      referencia: refKey,
-    });
+    try {
+      await db.insert(transacoes).values({
+        id: crypto.randomUUID(),
+        tenantId,
+        tipo: "receita",
+        categoria: data.formaPagamento,
+        descricao: data.descricao,
+        valor: data.valor.toFixed(2),
+        status: "pago",
+        data: data.data,
+        pago: true,
+        referencia: refKey,
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === "23505") throw new Error("Pagamento já registrado");
+      throw err;
+    }
   });
 
 const getDadosAvulso = createServerFn({ method: "GET" }).handler(async () => {
@@ -169,7 +174,7 @@ const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
     const { db } = await import("~/db");
     const { tenantId } = await requireTenant();
     const { appointments, transacoes, tutores, pets, prontuarios, professionals, services } = await import("~/db/schema");
-    const { eq, and } = await import("drizzle-orm");
+    const { eq, and, ilike } = await import("drizzle-orm");
 
     const horaAtual = new Date().toTimeString().slice(0, 5);
     let finalTutorId = data.tutorId;
@@ -192,6 +197,21 @@ const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
       const servicosValidos = await db.query.services.findMany({ where: and(eq(services.tenantId, tenantId)) });
       const idsValidos = new Set(servicosValidos.map((s) => s.id));
       if (data.servicos.some((s) => !idsValidos.has(s.serviceId))) throw new Error("Serviço não encontrado");
+    }
+
+    // Cliente sem cadastro: reaproveita tutor/pet já existentes com o mesmo nome
+    // em vez de criar duplicados a cada atendimento avulso registrado no mesmo nome
+    if (!finalTutorId && data.novoNomeTutor?.trim()) {
+      const tutorExistente = await db.query.tutores.findFirst({
+        where: and(eq(tutores.tenantId, tenantId), ilike(tutores.nome, data.novoNomeTutor.trim())),
+      });
+      if (tutorExistente) finalTutorId = tutorExistente.id;
+    }
+    if (finalTutorId && !finalPetId && data.nomePet?.trim()) {
+      const petExistente = await db.query.pets.findFirst({
+        where: and(eq(pets.tenantId, tenantId), eq(pets.tutorId, finalTutorId), ilike(pets.nome, data.nomePet.trim())),
+      });
+      if (petExistente) finalPetId = petExistente.id;
     }
 
     // Se já existe um pagamento de caixa para este tutor neste dia, bloqueia (evita cobrança duplicada)
@@ -264,18 +284,23 @@ const registrarAtendimentoAvulso = createServerFn({ method: "POST" })
       data.produtos.map((p) => `${p.nome}${p.qty > 1 ? ` x${p.qty}` : ""}`).join(", "),
     ].filter(Boolean);
 
-    await db.insert(transacoes).values({
-      id: crypto.randomUUID(),
-      tenantId,
-      tipo: "receita",
-      categoria: data.formaPagamento,
-      descricao: partes.join(" | "),
-      valor: data.total.toFixed(2),
-      status: "pago",
-      data: data.data,
-      pago: true,
-      referencia: finalTutorId ? `caixa-${finalTutorId}-${data.data}` : `avulso-${crypto.randomUUID()}`,
-    });
+    try {
+      await db.insert(transacoes).values({
+        id: crypto.randomUUID(),
+        tenantId,
+        tipo: "receita",
+        categoria: data.formaPagamento,
+        descricao: partes.join(" | "),
+        valor: data.total.toFixed(2),
+        status: "pago",
+        data: data.data,
+        pago: true,
+        referencia: finalTutorId ? `caixa-${finalTutorId}-${data.data}` : `avulso-${crypto.randomUUID()}`,
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === "23505") throw new Error("Pagamento já registrado");
+      throw err;
+    }
   });
 
 /* ── types ────────────────────────────────────────────────────────────── */
@@ -434,7 +459,7 @@ function AtendimentoAvulsoDialog({
       fechar();
       onSuccess();
     },
-    onError: () => toast.error("Erro ao registrar atendimento"),
+    onError: (e: any) => toast.error(e.message ?? "Erro ao registrar atendimento"),
   });
 
   const petDoTutor = tutorSel?.pets ?? [];

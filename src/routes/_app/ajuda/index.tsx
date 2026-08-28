@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Printer, BookOpen } from "lucide-react";
+import { Printer, BookOpen, Mail, Phone } from "lucide-react";
 import { Button } from "~/components/ui/button";
 
 export const Route = createFileRoute("/_app/ajuda/")({
@@ -64,6 +64,7 @@ function imprimirManual() {
   <li>Relatórios</li>
   <li>Configurações</li>
   <li>Dicas e Boas Práticas</li>
+  <li>Contato / Suporte</li>
 </ol>
 </div>
 
@@ -393,6 +394,13 @@ Tipo: Despesa · Categoria: Aluguel · Descrição: "Aluguel julho/2025" · Valo
 
 <div class="dica"><strong>🐾 Parabéns!</strong> Você chegou ao final do manual. Com a prática diária, tudo ficará fácil e natural. Bom trabalho!</div>
 
+<h2>17. Contato / Suporte</h2>
+<p>Precisa de ajuda, tem alguma dúvida ou encontrou um problema no sistema? Fale com a equipe NexusTeck:</p>
+<ul>
+  <li><strong>E-mail:</strong> nexusteckbr@gmail.com</li>
+  <li><strong>WhatsApp:</strong> (21) 9.9984-0779</li>
+</ul>
+
 <p style="margin-top:40px;text-align:center;font-size:11px;color:#aaa">PetFlow — Manual do Usuário · Gerado em ${new Date().toLocaleDateString("pt-BR")}</p>
 </body></html>`);
   win.document.close();
@@ -492,6 +500,7 @@ function AjudaPage() {
             [14, "Relatórios"],
             [15, "Configurações"],
             [16, "Dicas e Boas Práticas"],
+            [17, "Contato / Suporte"],
           ].map(([n, t]) => (
             <a key={n} href={`#sec-${n}`}
               className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors py-0.5">
@@ -735,6 +744,34 @@ function AjudaPage() {
           <p className="text-lg">🐾</p>
           <p className="font-semibold text-primary">Parabéns! Você chegou ao final do manual.</p>
           <p className="text-sm text-muted-foreground mt-1">Com a prática diária, tudo ficará fácil e natural. Bom trabalho!</p>
+        </div>
+      </Secao>
+
+      <Secao numero={17} titulo="Contato / Suporte">
+        <p>Precisa de ajuda, tem alguma dúvida ou encontrou um problema no sistema? Fale com a equipe NexusTeck:</p>
+        <div className="grid sm:grid-cols-2 gap-3 my-2">
+          <a
+            href="mailto:nexusteckbr@gmail.com"
+            className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+          >
+            <Mail className="h-5 w-5 text-primary shrink-0" />
+            <div>
+              <p className="text-xs text-muted-foreground">E-mail</p>
+              <p className="font-medium">nexusteckbr@gmail.com</p>
+            </div>
+          </a>
+          <a
+            href="https://wa.me/5521999840779"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+          >
+            <Phone className="h-5 w-5 text-primary shrink-0" />
+            <div>
+              <p className="text-xs text-muted-foreground">WhatsApp</p>
+              <p className="font-medium">(21) 9.9984-0779</p>
+            </div>
+          </a>
         </div>
       </Secao>
 
